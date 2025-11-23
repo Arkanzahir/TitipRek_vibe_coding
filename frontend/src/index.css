@@ -1,0 +1,114 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    /* Canvas & Base */
+    --background: 0 0% 100%;
+    --foreground: 220 15% 12%;
+    
+    /* Card & Surface */
+    --card: 0 0% 100%;
+    --card-foreground: 220 15% 12%;
+    
+    /* Popover */
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 15% 12%;
+    
+    /* Brand Teal - ONLY for interactive elements */
+    --primary: 174 100% 38%;
+    --primary-foreground: 0 0% 100%;
+    
+    /* Secondary (minimal use) */
+    --secondary: 220 10% 96%;
+    --secondary-foreground: 220 15% 12%;
+    
+    /* Muted - Cool greys */
+    --muted: 220 10% 96%;
+    --muted-foreground: 220 10% 42%;
+    
+    /* Accent - Subtle highlight */
+    --accent: 220 10% 96%;
+    --accent-foreground: 220 15% 12%;
+    
+    /* Destructive */
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+    
+    /* Borders - Very light, thin */
+    --border: 220 10% 90%;
+    --input: 220 10% 90%;
+    --ring: 174 100% 38%;
+    
+    /* Radius - Professional (8-10px) */
+    --radius: 0.5rem;
+    
+    /* Sidebar */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 220 15% 12%;
+    --sidebar-primary: 174 100% 38%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 10% 96%;
+    --sidebar-accent-foreground: 220 15% 12%;
+    --sidebar-border: 220 10% 90%;
+    --sidebar-ring: 174 100% 38%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+}
+
+@layer utilities {
+  /* Professional flat shadows - minimal depth */
+  .shadow-flat {
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  }
+  
+  .shadow-flat-md {
+    box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.05);
+  }
+  
+  /* Smooth transitions */
+  .transition-smooth {
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Animations */
+  .animate-slide-in-right {
+    animation: slide-in-right 0.3s ease-out;
+  }
+
+  @keyframes slide-in-right {
+    from {
+      transform: translateX(100%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.2s ease-out;
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}

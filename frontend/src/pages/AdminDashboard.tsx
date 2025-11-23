@@ -1,0 +1,522 @@
+// src/pages/AdminDashboard.tsx
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { adminService } from "@/services/adminService";
+import { authService } from "@/services/authService";
+import {
+  Users,
+  Package,
+  DollarSign,
+  TrendingUp,
+  CheckCircle,
+  Clock,
+  X,
+  Loader2,
+  ArrowLeft,
+  Shield,
+  UserCheck,
+  FileText,
+  Eye,
+} from "lucide-react";
+
+interface PlatformStats {
+  users: {
+    total: number;
+    totalRunners: number;
+    pendingVerifications: number;
+    verifiedRunners: number;
+  };
+  orders: {
+    total: number;
+    active: number;
+    completed: number;
+  };
+  revenue: {
+    totalPlatformFees: number;
+  };
+}
+
+interface PendingRunner {
+  _id: string;
+  name: string;
+  email: string;
+  phoneNumber: string;
+  campus: string;
+  runnerVerification: {
+    status: string;
+    ktmPhoto: string;
+    submittedAt: string;
+  };
+  createdAt: string;
+}
+
+interface User {
+  _id: string;
+  name: string;
+  email: string;
+  phoneNumber: string;
+  campus: string;
+  roles: string[];
+  isActive: boolean;
+  runnerVerification: {
+    status: string;
+  };
+  createdAt: string;
+}
+
+interface Order {
+  _id: string;
+  title: string;
+  description: string;
+  orderType: string;
+  status: string;
+  estimatedItemCost: number;
+  serviceFeeCuan: number;
+  consumer: {
+    name: string;
+    email: string;
+  };
+  runner?: {
+    name: string;
+  };
+  createdAt: string;
+}
+
+const AdminDashboard = () => {
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState("overview");
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<PlatformStats | null>(null);
+  const [pendingRunners, setPendingRunners] = useState<PendingRunner[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [processing, setProcessing] = useState<string | null>(null);
+
+  useEffect(() => {
+    checkAdminAccess();
+    fetchData();
+  }, []);
+
+  const checkAdminAccess = () => {
+    const user = authService.getUser();
+    if (!user || !user.roles.includes("admin")) {
+      alert("Akses ditolak. Anda bukan admin!");
+      navigate("/dashboard");
+    }
+  };
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+
+      // Fetch stats
+      const statsResponse = await adminService.getStats();
+      if (statsResponse.success) {
+        setStats(statsResponse.data);
+      }
+
+      // Fetch pending verifications
+      const pendingResponse = await adminService.getPendingVerifications();
+      if (pendingResponse.success) {
+        setPendingRunners(pendingResponse.data);
+      }
+
+      // Fetch users
+      const usersResponse = await adminService.getUsers({ limit: 50 });
+      if (usersResponse.success) {
+        setUsers(usersResponse.data);
+      }
+
+      // Fetch orders
+      const ordersResponse = await adminService.getOrders({ limit: 50 });
+      if (ordersResponse.success) {
+        setOrders(ordersResponse.data);
+      }
+    } catch (error: any) {
+      console.error("Fetch data error:", error);
+      alert(error.message || "Gagal memuat data admin");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleApproveRunner = async (userId: string, name: string) => {
+    if (!window.confirm(`Approve runner ${name}?`)) return;
+
+    setProcessing(userId);
+    try {
+      const response = await adminService.approveRunner(userId);
+      if (response.success) {
+        alert(`✅ ${name} berhasil diverifikasi!`);
+        await fetchData();
+      }
+    } catch (error: any) {
+      alert(error.message || "Gagal approve runner");
+    } finally {
+      setProcessing(null);
+    }
+  };
+
+  const handleRejectRunner = async (userId: string, name: string) => {
+    const reason = prompt(`Masukkan alasan penolakan untuk ${name}:`);
+    if (!reason) return;
+
+    setProcessing(userId);
+    try {
+      const response = await adminService.rejectRunner(userId, reason);
+      if (response.success) {
+        alert(`❌ Verifikasi ${name} ditolak`);
+        await fetchData();
+      }
+    } catch (error: any) {
+      alert(error.message || "Gagal reject runner");
+    } finally {
+      setProcessing(null);
+    }
+  };
+
+  const handleToggleUserStatus = async (
+    userId: string,
+    name: string,
+    isActive: boolean
+  ) => {
+    if (
+      !window.confirm(`${isActive ? "Nonaktifkan" : "Aktifkan"} user ${name}?`)
+    )
+      return;
+
+    try {
+      const response = await adminService.toggleUserStatus(userId);
+      if (response.success) {
+        alert(response.message);
+        await fetchData();
+      }
+    } catch (error: any) {
+      alert(error.message || "Gagal toggle user status");
+    }
+  };
+
+  const formatCurrency = (amount: number) => {
+    return `Rp ${parseInt(amount.toString()).toLocaleString("id-ID")}`;
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 pb-6">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg sticky top-0 z-10">
+        <div className="container mx-auto px-4 py-6">
+          <div className="flex items-center gap-3 mb-4">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate("/dashboard")}
+              className="text-white hover:bg-white/20"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <Shield className="h-8 w-8" />
+            <h1 className="text-3xl font-bold">Admin Dashboard</h1>
+          </div>
+
+          {/* Stats Cards */}
+          {stats && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <Card className="p-4 bg-white/10 backdrop-blur border-white/20">
+                <div className="flex items-center gap-2 mb-2">
+                  <Users className="h-5 w-5" />
+                  <p className="text-sm">Total Users</p>
+                </div>
+                <p className="text-3xl font-bold">{stats.users.total}</p>
+                <p className="text-xs mt-1 opacity-90">
+                  {stats.users.totalRunners} runners
+                </p>
+              </Card>
+
+              <Card className="p-4 bg-white/10 backdrop-blur border-white/20">
+                <div className="flex items-center gap-2 mb-2">
+                  <Clock className="h-5 w-5" />
+                  <p className="text-sm">Pending</p>
+                </div>
+                <p className="text-3xl font-bold">
+                  {stats.users.pendingVerifications}
+                </p>
+                <p className="text-xs mt-1 opacity-90">verifikasi</p>
+              </Card>
+
+              <Card className="p-4 bg-white/10 backdrop-blur border-white/20">
+                <div className="flex items-center gap-2 mb-2">
+                  <Package className="h-5 w-5" />
+                  <p className="text-sm">Orders</p>
+                </div>
+                <p className="text-3xl font-bold">{stats.orders.total}</p>
+                <p className="text-xs mt-1 opacity-90">
+                  {stats.orders.active} aktif
+                </p>
+              </Card>
+
+              <Card className="p-4 bg-white/10 backdrop-blur border-white/20">
+                <div className="flex items-center gap-2 mb-2">
+                  <DollarSign className="h-5 w-5" />
+                  <p className="text-sm">Revenue</p>
+                </div>
+                <p className="text-2xl font-bold">
+                  {formatCurrency(stats.revenue.totalPlatformFees)}
+                </p>
+              </Card>
+            </div>
+          )}
+
+          {/* Tabs */}
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
+            <TabsList className="grid w-full grid-cols-4 bg-white/10">
+              <TabsTrigger
+                value="overview"
+                className="data-[state=active]:bg-white data-[state=active]:text-purple-600"
+              >
+                Overview
+              </TabsTrigger>
+              <TabsTrigger
+                value="verifications"
+                className="data-[state=active]:bg-white data-[state=active]:text-purple-600"
+              >
+                Verifikasi
+                {pendingRunners.length > 0 && (
+                  <Badge className="ml-2 bg-yellow-500">
+                    {pendingRunners.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger
+                value="users"
+                className="data-[state=active]:bg-white data-[state=active]:text-purple-600"
+              >
+                Users
+              </TabsTrigger>
+              <TabsTrigger
+                value="orders"
+                className="data-[state=active]:bg-white data-[state=active]:text-purple-600"
+              >
+                Orders
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="container mx-auto px-4 py-6">
+        <Tabs value={activeTab}>
+          {/* Overview Tab */}
+          <TabsContent value="overview" className="space-y-4">
+            <Card className="p-6">
+              <h2 className="text-xl font-bold mb-4">Platform Overview</h2>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <h3 className="font-semibold mb-2">User Statistics</h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span>Total Users:</span>
+                      <span className="font-bold">{stats?.users.total}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Verified Runners:</span>
+                      <span className="font-bold text-green-600">
+                        {stats?.users.verifiedRunners}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Pending Verifications:</span>
+                      <span className="font-bold text-yellow-600">
+                        {stats?.users.pendingVerifications}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-2">Order Statistics</h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span>Total Orders:</span>
+                      <span className="font-bold">{stats?.orders.total}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Active Orders:</span>
+                      <span className="font-bold text-blue-600">
+                        {stats?.orders.active}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Completed:</span>
+                      <span className="font-bold text-green-600">
+                        {stats?.orders.completed}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </TabsContent>
+
+          {/* Verifications Tab */}
+          <TabsContent value="verifications" className="space-y-4">
+            {pendingRunners.length === 0 ? (
+              <Card className="p-8 text-center">
+                <CheckCircle className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+                <p className="text-gray-600">Tidak ada verifikasi pending</p>
+              </Card>
+            ) : (
+              pendingRunners.map((runner) => (
+                <Card key={runner._id} className="p-4">
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <h3 className="font-bold text-lg">{runner.name}</h3>
+                      <p className="text-sm text-gray-600">{runner.email}</p>
+                      <p className="text-sm text-gray-600">
+                        {runner.phoneNumber} • {runner.campus}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-2">
+                        Diajukan:{" "}
+                        {new Date(
+                          runner.runnerVerification.submittedAt
+                        ).toLocaleString("id-ID")}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      {runner.runnerVerification.ktmPhoto && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            window.open(
+                              runner.runnerVerification.ktmPhoto,
+                              "_blank"
+                            )
+                          }
+                        >
+                          <Eye className="h-4 w-4 mr-1" />
+                          Lihat KTM
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  <Separator className="my-3" />
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() =>
+                        handleApproveRunner(runner._id, runner.name)
+                      }
+                      disabled={processing === runner._id}
+                      className="flex-1 bg-green-600 hover:bg-green-700"
+                    >
+                      {processing === runner._id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <>
+                          <CheckCircle className="h-4 w-4 mr-2" />
+                          Approve
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      onClick={() =>
+                        handleRejectRunner(runner._id, runner.name)
+                      }
+                      disabled={processing === runner._id}
+                      variant="destructive"
+                      className="flex-1"
+                    >
+                      <X className="h-4 w-4 mr-2" />
+                      Reject
+                    </Button>
+                  </div>
+                </Card>
+              ))
+            )}
+          </TabsContent>
+
+          {/* Users Tab */}
+          <TabsContent value="users" className="space-y-4">
+            {users.map((user) => (
+              <Card key={user._id} className="p-4">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="font-bold">{user.name}</h3>
+                    <p className="text-sm text-gray-600">{user.email}</p>
+                    <p className="text-sm text-gray-600">{user.phoneNumber}</p>
+                    <div className="flex gap-2 mt-2">
+                      {user.roles.map((role) => (
+                        <Badge key={role} variant="secondary">
+                          {role}
+                        </Badge>
+                      ))}
+                      <Badge
+                        variant={user.isActive ? "default" : "destructive"}
+                      >
+                        {user.isActive ? "Aktif" : "Nonaktif"}
+                      </Badge>
+                    </div>
+                  </div>
+                  <Button
+                    onClick={() =>
+                      handleToggleUserStatus(user._id, user.name, user.isActive)
+                    }
+                    variant="outline"
+                    size="sm"
+                  >
+                    {user.isActive ? "Nonaktifkan" : "Aktifkan"}
+                  </Button>
+                </div>
+              </Card>
+            ))}
+          </TabsContent>
+
+          {/* Orders Tab */}
+          <TabsContent value="orders" className="space-y-4">
+            {orders.map((order) => (
+              <Card key={order._id} className="p-4">
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <h3 className="font-bold">{order.title}</h3>
+                    <p className="text-sm text-gray-600 line-clamp-1">
+                      {order.description}
+                    </p>
+                  </div>
+                  <Badge>{order.status}</Badge>
+                </div>
+                <div className="text-sm space-y-1">
+                  <p>
+                    <strong>Consumer:</strong> {order.consumer.name}
+                  </p>
+                  {order.runner && (
+                    <p>
+                      <strong>Runner:</strong> {order.runner.name}
+                    </p>
+                  )}
+                  <p>
+                    <strong>Cuan:</strong>{" "}
+                    {formatCurrency(order.serviceFeeCuan)}
+                  </p>
+                </div>
+              </Card>
+            ))}
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
+  );
+};
+
+export default AdminDashboard;
