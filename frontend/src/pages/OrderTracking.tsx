@@ -374,7 +374,7 @@ const OrderTracking = () => {
                   {step.photo && (
                     <div className="mt-2">
                       <img
-                        src={`http://localhost:5000${step.photo}`}
+                        src={`https://titip-rek-vibe-coding.vercel.app${step.photo}`}
                         alt="Bukti"
                         className="rounded-lg h-32 w-auto object-cover border border-gray-200 shadow-sm"
                         onError={(e) => {

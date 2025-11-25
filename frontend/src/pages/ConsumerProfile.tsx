@@ -34,7 +34,7 @@ import {
   ShoppingBag, // Icon Konsumen
 } from "lucide-react";
 
-const API_URL = "http://localhost:5000/api";
+const API_URL = "https://titip-rek-vibe-coding.vercel.app/api";
 
 const ConsumerProfile = () => {
   const navigate = useNavigate();
@@ -128,7 +128,7 @@ const ConsumerProfile = () => {
     if (!path) return "";
     return path.startsWith("data:") || path.startsWith("http")
       ? path
-      : `http://localhost:5000${path}`;
+      : `https://titip-rek-vibe-coding.vercel.app${path}`;
   };
 
   // Logika Cek Role

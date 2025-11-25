@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 
 // 🔥 TAMBAHAN: URL BACKEND AGAR GAMBAR BISA DIBUKA
-const API_URL = "http://localhost:5000";
+const API_URL = "https://titip-rek-vibe-coding.vercel.app";
 
 interface PlatformStats {
   users: {
