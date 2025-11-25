@@ -1,4 +1,4 @@
-// src/pages/RunnerDashboard.tsx
+// src/pages/RunnerDashboard.tsx - FINAL TANPA TARIK SALDO
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,6 @@ import {
   Loader2,
   ArrowLeft,
   AlertCircle,
-  Wallet,
   LogOut,
   Menu,
   X as CloseIcon,
@@ -128,7 +127,7 @@ const RunnerDashboard = () => {
     }
   };
 
-  // --- HELPER FORMATTING (SUDAH DIPERBAIKI BIAR GAK NaN) ---
+  // --- HELPER FORMATTING ---
   const formatCurrency = (amount: any) => {
     if (amount === undefined || amount === null) return "Rp 0";
     const num = parseFloat(amount.toString());
@@ -158,7 +157,7 @@ const RunnerDashboard = () => {
     return <Badge variant={info.variant}>{info.label}</Badge>;
   };
 
-  // --- KOMPONEN KARTU MISI (DESAIN ORIGINAL) ---
+  // --- KOMPONEN KARTU MISI ---
   const MissionCard = ({
     order,
     showActions = false,
@@ -268,7 +267,7 @@ const RunnerDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-6">
-      {/* HEADER TEAL (ORIGINAL DESIGN) */}
+      {/* HEADER */}
       <div className="bg-gradient-to-r from-teal-600 to-teal-500 text-white shadow-xl sticky top-0 z-10">
         <div className="container mx-auto px-4 py-6">
           {/* Top Bar */}
@@ -308,7 +307,7 @@ const RunnerDashboard = () => {
             </Button>
           </div>
 
-          {/* Quick Actions Menu (Burger) */}
+          {/* Quick Actions Menu (Burger) - TANPA TARIK SALDO */}
           {showMenu && (
             <div className="bg-white/10 backdrop-blur-md rounded-xl p-4 mb-4 space-y-2 animate-in fade-in slide-in-from-top-2">
               <Button
@@ -320,16 +319,6 @@ const RunnerDashboard = () => {
                 }}
               >
                 <User className="h-5 w-5 mr-3" /> Lihat Profil
-              </Button>
-              <Button
-                variant="ghost"
-                className="w-full justify-start text-white hover:bg-white/20"
-                onClick={() => {
-                  navigate("/runner-withdrawal");
-                  setShowMenu(false);
-                }}
-              >
-                <Wallet className="h-5 w-5 mr-3" /> Tarik Saldo
               </Button>
               <Button
                 variant="ghost"
@@ -349,7 +338,7 @@ const RunnerDashboard = () => {
             </div>
           )}
 
-          {/* Stats Cards (ORIGINAL DESIGN) */}
+          {/* Stats Cards - TANPA TOMBOL TARIK SALDO */}
           {stats && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
               <Card className="p-3 bg-white/90 backdrop-blur border-0 shadow-lg">
@@ -392,11 +381,14 @@ const RunnerDashboard = () => {
                 <div className="flex items-center gap-2 mb-1">
                   <DollarSign className="h-4 w-4 text-white" />
                   <p className="text-[10px] uppercase font-bold text-white/90">
-                    Total Cuan
+                    Total Pendapatan
                   </p>
                 </div>
                 <p className="text-xl font-bold">
                   {formatCurrency(stats.totalEarnings)}
+                </p>
+                <p className="text-[10px] text-white/80 mt-1">
+                  (Tunai dari COD)
                 </p>
               </Card>
             </div>
