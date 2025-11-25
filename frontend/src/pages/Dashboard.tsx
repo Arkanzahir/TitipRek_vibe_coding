@@ -78,10 +78,25 @@ const Dashboard = () => {
   const checkRunnerVerification = async () => {
     setCheckingRunner(true);
     try {
+      // 1. Minta data terbaru ke server
       const response = await runnerService.getVerificationStatus();
+      console.log("Runner verification check:", response);
+
       if (response.success && response.data) {
         setRunnerStatus(response.data);
+
+        // 2. Cek status terbaru dari server
         if (response.data.verificationStatus === "verified") {
+          console.log("✅ User is verified (server confirmed), redirecting...");
+
+          // 3. Update juga data user di localStorage biar sinkron
+          const currentUser = authService.getUser();
+          if (currentUser && !currentUser.roles.includes("runner")) {
+            currentUser.roles.push("runner");
+            localStorage.setItem("user", JSON.stringify(currentUser));
+          }
+
+          // 4. Langsung Redirect
           navigate("/runner-dashboard", { replace: true });
           return;
         }
@@ -92,7 +107,6 @@ const Dashboard = () => {
       setCheckingRunner(false);
     }
   };
-
   const getStatusText = (status: string) => {
     const statusMap: Record<string, string> = {
       diambil: "Pesanan Diambil Runner",

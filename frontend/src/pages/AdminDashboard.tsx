@@ -1,4 +1,4 @@
-// src/pages/AdminDashboard.tsx
+// src/pages/AdminDashboard.tsx - FIX DATA PENDING
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -20,8 +20,8 @@ import {
   Eye,
 } from "lucide-react";
 
-// 🔥 TAMBAHAN: URL BACKEND AGAR GAMBAR BISA DIBUKA
-const API_URL = "https://titip-rek-vibe-coding.vercel.app";
+// URL Backend untuk buka foto
+const API_URL = "https://titip-rek-vibe-coding.vercel.app"; // Ganti dengan link vercel backend kamu kalau sudah deploy
 
 interface PlatformStats {
   users: {
@@ -106,39 +106,26 @@ const AdminDashboard = () => {
       setLoading(true);
       setError(null);
 
-      // Fetch stats
+      // 1. Ambil Statistik
       const statsResponse = await adminService.getStats();
       if (statsResponse.success) {
         setStats(statsResponse.data);
       }
 
-      // Fetch all users then filter runners
+      // 2. 🔥 FIX: Ambil Data Pending Pakai Endpoint Khusus (Bukan Filter Manual)
+      const pendingResponse = await adminService.getPendingVerifications();
+      if (pendingResponse.success) {
+        console.log("Data Pending:", pendingResponse.data); // Debug
+        setPendingRunners(pendingResponse.data);
+      }
+
+      // 3. Ambil Semua Users
       const usersResponse = await adminService.getUsers({ limit: 100 });
       if (usersResponse.success) {
         setUsers(usersResponse.data);
-
-        // Filter semua users yang punya runnerVerification field (potential runners)
-        const allRunners = (usersResponse.data || []).filter(
-          (user: User) =>
-            user.runnerVerification &&
-            user.runnerVerification.status === "pending"
-        );
-
-        // Convert ke PendingRunner format
-        const formattedRunners = allRunners.map((user: User) => ({
-          _id: user._id,
-          name: user.name,
-          email: user.email,
-          phoneNumber: user.phoneNumber,
-          campus: user.campus,
-          runnerVerification: user.runnerVerification,
-          createdAt: user.createdAt,
-        }));
-
-        setPendingRunners(formattedRunners);
       }
 
-      // Fetch orders
+      // 4. Ambil Order
       const ordersResponse = await adminService.getOrders({ limit: 50 });
       if (ordersResponse.success) {
         setOrders(ordersResponse.data);
@@ -159,7 +146,7 @@ const AdminDashboard = () => {
       const response = await adminService.approveRunner(userId);
       if (response.success) {
         alert(`✅ ${name} berhasil diverifikasi!`);
-        await fetchData();
+        await fetchData(); // Refresh data setelah approve
       } else {
         alert(`Gagal approve: ${response.message}`);
       }
@@ -179,7 +166,7 @@ const AdminDashboard = () => {
       const response = await adminService.rejectRunner(userId, reason);
       if (response.success) {
         alert(`❌ Verifikasi ${name} ditolak`);
-        await fetchData();
+        await fetchData(); // Refresh data setelah reject
       } else {
         alert(`Gagal reject: ${response.message}`);
       }
@@ -211,9 +198,9 @@ const AdminDashboard = () => {
     }
   };
 
-  // Helper untuk buka foto KTM dengan URL yang benar
   const openKtmPhoto = (path: string) => {
     if (!path) return;
+    // Cek apakah path sudah full URL atau belum
     const fullUrl = path.startsWith("http") ? path : `${API_URL}${path}`;
     window.open(fullUrl, "_blank");
   };
@@ -266,7 +253,6 @@ const AdminDashboard = () => {
                   {stats.users.totalRunners} runners
                 </p>
               </Card>
-
               <Card className="p-4 bg-white border-0 shadow-lg">
                 <div className="flex items-center gap-2 mb-2">
                   <Clock className="h-5 w-5 text-yellow-600" />
@@ -277,7 +263,6 @@ const AdminDashboard = () => {
                 </p>
                 <p className="text-xs mt-1 text-gray-500">verifikasi</p>
               </Card>
-
               <Card className="p-4 bg-white border-0 shadow-lg">
                 <div className="flex items-center gap-2 mb-2">
                   <Package className="h-5 w-5 text-blue-600" />
@@ -290,7 +275,6 @@ const AdminDashboard = () => {
                   {stats.orders.active} aktif
                 </p>
               </Card>
-
               <Card className="p-4 bg-white border-0 shadow-lg">
                 <div className="flex items-center gap-2 mb-2">
                   <DollarSign className="h-5 w-5 text-green-600" />
@@ -343,7 +327,7 @@ const AdminDashboard = () => {
       {/* Content */}
       <div className="container mx-auto px-4 py-6">
         <Tabs value={activeTab}>
-          {/* Overview Tab */}
+          {/* OVERVIEW TAB */}
           <TabsContent value="overview" className="space-y-4">
             <Card className="p-6">
               <h2 className="text-xl font-bold mb-4">Platform Overview</h2>
@@ -394,7 +378,7 @@ const AdminDashboard = () => {
             </Card>
           </TabsContent>
 
-          {/* Verifications Tab */}
+          {/* VERIFICATIONS TAB (FIXED) */}
           <TabsContent value="verifications" className="space-y-4">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-bold">Verifikasi Runner Pending</h2>
@@ -407,12 +391,15 @@ const AdminDashboard = () => {
               <Card className="p-8 text-center bg-white">
                 <CheckCircle className="h-12 w-12 text-gray-400 mx-auto mb-3" />
                 <p className="text-gray-600">Tidak ada verifikasi pending</p>
+                <p className="text-xs text-gray-400 mt-2">
+                  Semua aman! Belum ada yang daftar lagi.
+                </p>
               </Card>
             ) : (
               pendingRunners.map((runner) => (
                 <Card
                   key={runner._id}
-                  className="p-4 bg-white border border-gray-200 mb-3"
+                  className="p-4 bg-white border border-gray-200 mb-3 shadow-sm"
                 >
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
@@ -479,7 +466,7 @@ const AdminDashboard = () => {
             )}
           </TabsContent>
 
-          {/* Users Tab */}
+          {/* USERS TAB */}
           <TabsContent value="users" className="space-y-4">
             {users.map((user) => (
               <Card
@@ -517,7 +504,7 @@ const AdminDashboard = () => {
             ))}
           </TabsContent>
 
-          {/* Orders Tab */}
+          {/* ORDERS TAB */}
           <TabsContent value="orders" className="space-y-4">
             {orders.map((order) => (
               <Card
