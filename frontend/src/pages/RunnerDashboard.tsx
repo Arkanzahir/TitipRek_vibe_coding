@@ -1,4 +1,4 @@
-// src/pages/RunnerDashboard.tsx - FINAL TANPA TARIK SALDO
+// src/pages/RunnerDashboard.tsx
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
