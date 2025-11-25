@@ -29,8 +29,37 @@ export const runnerService = {
      *   rejectionReason: string
      * }
      */
-    const response = await api.get("/runner/verification-status");
-    return response;
+    try {
+      const response = await api.get("/runner/verification-status");
+
+      // Validate response structure
+      if (!response || !response.data) {
+        console.error("Invalid response structure:", response);
+        return {
+          success: false,
+          message: "Invalid response from server",
+          data: null,
+        };
+      }
+
+      // Ensure success flag exists
+      if (response.success === undefined) {
+        response.success = true;
+      }
+
+      return response;
+    } catch (error) {
+      console.error("Get Verification Status Error:", error);
+      return {
+        success: false,
+        message:
+          error.response?.data?.message ||
+          error.message ||
+          "Gagal mengambil status verifikasi",
+        data: null,
+        error: error,
+      };
+    }
   },
 
   // ============ MISSION MANAGEMENT ============

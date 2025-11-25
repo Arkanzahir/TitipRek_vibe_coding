@@ -1,3 +1,4 @@
+// backend/routes/order.workflow.routes.js
 const express = require("express");
 const router = express.Router();
 const Order = require("../models/Order.model");
@@ -9,8 +10,7 @@ const {
 const { uploadToCloud } = require("../utils/upload.util");
 
 // @route   POST /api/orders/:id/upload-proof-1
-// @desc    Upload Proof 1 - Purchase/Pickup (STEP 2 of workflow)
-// @access  Private + Verified Runner Only
+// @desc    Upload Proof 1 - Purchase/Pickup (STEP 2)
 router.post(
   "/:id/upload-proof-1",
   protect,
@@ -35,29 +35,22 @@ router.post(
         });
       }
 
-      // Validate runner is the one who took the mission
       if (!order.runner || order.runner.toString() !== req.user.id) {
         return res.status(403).json({
           success: false,
-          message:
-            "Anda tidak memiliki akses untuk mengupload bukti pesanan ini",
+          message: "Anda tidak memiliki akses",
         });
       }
 
-      // CRITICAL: Validate workflow step
       if (!order.canUploadProof1()) {
         return res.status(400).json({
           success: false,
-          message: order.workflowProofs.proof1Purchase.photoUrl
-            ? "Bukti pembelian sudah diupload sebelumnya"
-            : `Status pesanan harus "diambil" untuk upload bukti pembelian. Status saat ini: ${order.status}`,
+          message: "Status pesanan tidak sesuai untuk upload bukti ini",
         });
       }
 
-      // Upload photo to cloud
       const photoUrl = await uploadToCloud(photoBase64, "proof-purchase");
 
-      // Update order with proof 1
       order.workflowProofs.proof1Purchase = {
         photoUrl,
         uploadedAt: new Date(),
@@ -71,21 +64,19 @@ router.post(
         success: true,
         message: "Bukti pembelian berhasil diupload!",
         data: order,
-        nextStep: "Upload bukti foto pengantaran setelah barang diantar",
       });
     } catch (error) {
       console.error("Upload Proof 1 Error:", error);
       res.status(500).json({
         success: false,
-        message: "Terjadi kesalahan saat upload bukti pembelian",
+        message: "Terjadi kesalahan saat upload bukti",
       });
     }
   }
 );
 
 // @route   POST /api/orders/:id/upload-proof-2
-// @desc    Upload Proof 2 - Delivery (STEP 3 of workflow)
-// @access  Private + Verified Runner Only
+// @desc    Upload Proof 2 - Delivery (STEP 3)
 router.post(
   "/:id/upload-proof-2",
   protect,
@@ -110,31 +101,22 @@ router.post(
         });
       }
 
-      // Validate runner
       if (!order.runner || order.runner.toString() !== req.user.id) {
         return res.status(403).json({
           success: false,
-          message:
-            "Anda tidak memiliki akses untuk mengupload bukti pesanan ini",
+          message: "Anda tidak memiliki akses",
         });
       }
 
-      // CRITICAL: Validate workflow step
       if (!order.canUploadProof2()) {
         return res.status(400).json({
           success: false,
-          message: !order.workflowProofs.proof1Purchase.photoUrl
-            ? "Harus upload bukti pembelian terlebih dahulu"
-            : order.workflowProofs.proof2Delivery.photoUrl
-            ? "Bukti pengantaran sudah diupload sebelumnya"
-            : `Status pesanan harus "sudah_dibeli" untuk upload bukti pengantaran. Status saat ini: ${order.status}`,
+          message: "Status pesanan tidak sesuai untuk upload bukti ini",
         });
       }
 
-      // Upload photo to cloud
       const photoUrl = await uploadToCloud(photoBase64, "proof-delivery");
 
-      // Update order with proof 2
       order.workflowProofs.proof2Delivery = {
         photoUrl,
         uploadedAt: new Date(),
@@ -148,13 +130,12 @@ router.post(
         success: true,
         message: "Bukti pengantaran berhasil diupload!",
         data: order,
-        nextStep: "Tunggu konsumen konfirmasi penerimaan barang",
       });
     } catch (error) {
       console.error("Upload Proof 2 Error:", error);
       res.status(500).json({
         success: false,
-        message: "Terjadi kesalahan saat upload bukti pengantaran",
+        message: "Terjadi kesalahan saat upload bukti",
       });
     }
   }
@@ -162,143 +143,105 @@ router.post(
 
 // @route   POST /api/orders/:id/confirm-complete
 // @desc    Confirm order completion by consumer (FINAL STEP)
-// @access  Private (Consumer only)
 router.post("/:id/confirm-complete", protect, async (req, res) => {
-  const session = await Order.startSession();
-  session.startTransaction();
-
   try {
-    const order = await Order.findById(req.params.id).session(session);
+    const order = await Order.findById(req.params.id);
 
     if (!order) {
-      await session.abortTransaction();
       return res.status(404).json({
         success: false,
         message: "Pesanan tidak ditemukan",
       });
     }
 
-    // Validate consumer
     if (order.consumer.toString() !== req.user.id) {
-      await session.abortTransaction();
       return res.status(403).json({
         success: false,
         message: "Hanya konsumen yang dapat konfirmasi penyelesaian pesanan",
       });
     }
 
-    // Validate status
     if (order.status !== "sedang_diantar") {
-      await session.abortTransaction();
       return res.status(400).json({
         success: false,
-        message:
-          'Pesanan harus dalam status "sedang_diantar" untuk dikonfirmasi selesai',
+        message: 'Pesanan harus dalam status "sedang_diantar"',
       });
     }
 
-    // Validate both proofs exist
-    if (
-      !order.workflowProofs.proof1Purchase.photoUrl ||
-      !order.workflowProofs.proof2Delivery.photoUrl
-    ) {
-      await session.abortTransaction();
-      return res.status(400).json({
-        success: false,
-        message: "Kedua bukti foto harus sudah diupload oleh runner",
-      });
-    }
-
-    // Update order to completed
     order.status = "selesai";
     order.completedAt = new Date();
-    await order.save({ session });
 
-    // Update runner stats
+    await order.save();
+
     const serviceFee = parseFloat(order.serviceFeeCuan.toString());
 
-    await User.findByIdAndUpdate(
-      order.runner,
-      {
-        $inc: {
-          "runnerStats.completedMissions": 1,
-          "runnerStats.totalEarnings": serviceFee,
-        },
-      },
-      { session }
-    );
+    // Update runner stats (Safely with updateOne)
+    if (order.runner) {
+      await User.updateOne(
+        { _id: order.runner },
+        {
+          $inc: {
+            "runnerStats.completedMissions": 1,
+            "runnerStats.totalEarnings": serviceFee,
+          },
+        }
+      );
+    }
 
-    // Update consumer stats
-    await User.findByIdAndUpdate(
-      order.consumer,
+    // Update consumer stats (Safely with updateOne)
+    await User.updateOne(
+      { _id: order.consumer },
       {
         $inc: { "consumerStats.completedOrders": 1 },
-      },
-      { session }
+      }
     );
-
-    await session.commitTransaction();
 
     res.json({
       success: true,
       message:
         "Pesanan berhasil diselesaikan! Terima kasih telah menggunakan TitipRek",
       data: order,
-      nextStep: "Anda dapat memberikan rating dan review untuk runner",
     });
   } catch (error) {
-    await session.abortTransaction();
     console.error("Confirm Complete Error:", error);
     res.status(500).json({
       success: false,
       message: "Terjadi kesalahan saat konfirmasi penyelesaian pesanan",
     });
-  } finally {
-    session.endSession();
   }
 });
 
 // @route   POST /api/orders/:id/rate
 // @desc    Rate and review runner after completion
-// @access  Private (Consumer only)
+// 🔥 VERSI ANTI-CRASH / ROBUST (Fix Error 500)
 router.post("/:id/rate", protect, async (req, res) => {
-  const session = await Order.startSession();
-  session.startTransaction();
-
   try {
     const { stars, comment } = req.body;
 
-    // Validate rating
     if (!stars || stars < 1 || stars > 5) {
-      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: "Rating harus antara 1-5 bintang",
       });
     }
 
-    const order = await Order.findById(req.params.id).session(session);
+    const order = await Order.findById(req.params.id);
 
     if (!order) {
-      await session.abortTransaction();
       return res.status(404).json({
         success: false,
         message: "Pesanan tidak ditemukan",
       });
     }
 
-    // Validate consumer
     if (order.consumer.toString() !== req.user.id) {
-      await session.abortTransaction();
       return res.status(403).json({
         success: false,
         message: "Hanya konsumen yang dapat memberikan rating",
       });
     }
 
-    // Can only rate completed orders
     if (order.status !== "selesai") {
-      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message:
@@ -306,57 +249,59 @@ router.post("/:id/rate", protect, async (req, res) => {
       });
     }
 
-    // Check if already rated
-    if (order.rating.stars) {
-      await session.abortTransaction();
+    if (order.rating && order.rating.stars) {
       return res.status(400).json({
         success: false,
         message: "Pesanan ini sudah diberi rating sebelumnya",
       });
     }
 
-    // Save rating to order
+    // 1. Simpan Rating ke Order (Update Order saja)
     order.rating = {
       stars: parseInt(stars),
       comment: comment || "",
       ratedAt: new Date(),
     };
-    await order.save({ session });
+    await order.save();
 
-    // Update runner's average rating
-    const runner = await User.findById(order.runner).session(session);
+    // 2. Update Rating Runner (SAFE UPDATE)
+    if (order.runner) {
+      const runner = await User.findById(order.runner);
 
-    const totalReviews = runner.runnerStats.totalReviews;
-    const currentAvg = runner.runnerStats.averageRating;
-    const newAvg =
-      (currentAvg * totalReviews + parseInt(stars)) / (totalReviews + 1);
+      if (runner) {
+        // Ambil data lama (pakai 0 kalau null/undefined)
+        const currentReviews = runner.runnerStats?.totalReviews || 0;
+        const currentAvg = parseFloat(runner.runnerStats?.averageRating || 0);
+        const newStars = parseInt(stars);
 
-    runner.runnerStats.averageRating = newAvg;
-    runner.runnerStats.totalReviews = totalReviews + 1;
-    await runner.save({ session });
+        // Rumus Rata-rata Baru
+        const newAvg =
+          (currentAvg * currentReviews + newStars) / (currentReviews + 1);
 
-    await session.commitTransaction();
+        // 🔥 GUNAKAN updateOne AGAR TIDAK VALIDASI FIELD LAIN
+        await User.updateOne(
+          { _id: order.runner },
+          {
+            $set: {
+              "runnerStats.averageRating": newAvg,
+              "runnerStats.totalReviews": currentReviews + 1,
+            },
+          }
+        );
+      }
+    }
 
     res.json({
       success: true,
       message: "Terima kasih atas rating dan review Anda!",
-      data: {
-        order: order,
-        runnerNewRating: {
-          averageRating: newAvg.toFixed(2),
-          totalReviews: totalReviews + 1,
-        },
-      },
+      data: order,
     });
   } catch (error) {
-    await session.abortTransaction();
     console.error("Rate Order Error:", error);
     res.status(500).json({
       success: false,
       message: "Terjadi kesalahan saat memberikan rating",
     });
-  } finally {
-    session.endSession();
   }
 });
 

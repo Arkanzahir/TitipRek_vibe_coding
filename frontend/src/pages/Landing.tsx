@@ -12,7 +12,7 @@ const Landing = () => {
             TitipRek
           </h1>
           <Link to="/auth">
-            <Button className="bg-gradient-to-r from-primary to-accent hover:opacity-90 text-white font-semibold rounded-xl shadow-lg">
+            <Button className="bg-primary hover:opacity-90 text-white font-semibold rounded-xl shadow-lg">
               Masuk
             </Button>
           </Link>
@@ -26,12 +26,13 @@ const Landing = () => {
             Platform Logistik & Kebutuhan Harian Kampus Terintegrasi
           </h2>
           <p className="text-lg text-muted-foreground mb-8 leading-relaxed">
-            Menghubungkan kebutuhan konsumen dan penyedia jasa dalam satu ekosistem kampus yang efisien.
+            Menghubungkan kebutuhan konsumen dan penyedia jasa dalam satu
+            ekosistem kampus yang efisien.
           </p>
           <Link to="/auth">
-            <Button 
-              size="lg" 
-              className="gap-2 px-10 py-6 text-lg font-bold bg-gradient-to-r from-primary to-accent hover:opacity-90 rounded-xl shadow-xl transition-all hover:scale-105"
+            <Button
+              size="lg"
+              className="gap-2 px-10 py-6 text-lg font-bold bg-primary hover:opacity-90 rounded-xl shadow-xl transition-all hover:scale-105 text-white"
             >
               Daftar Sekarang 🚀
               <ArrowRight className="h-5 w-5" />
@@ -45,7 +46,9 @@ const Landing = () => {
             <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
               <Shield className="h-5 w-5 text-primary" />
             </div>
-            <h3 className="font-semibold text-foreground mb-2">Verifikasi Identitas</h3>
+            <h3 className="font-semibold text-foreground mb-2">
+              Verifikasi Identitas
+            </h3>
             <p className="text-sm text-muted-foreground">
               Semua runner diverifikasi dengan KTM untuk keamanan maksimal
             </p>
@@ -55,7 +58,9 @@ const Landing = () => {
             <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
               <Zap className="h-5 w-5 text-primary" />
             </div>
-            <h3 className="font-semibold text-foreground mb-2">Transaksi Cepat</h3>
+            <h3 className="font-semibold text-foreground mb-2">
+              Transaksi Cepat
+            </h3>
             <p className="text-sm text-muted-foreground">
               Sistem insentif transparan untuk efisiensi maksimal
             </p>
@@ -65,7 +70,9 @@ const Landing = () => {
             <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
               <Users className="h-5 w-5 text-primary" />
             </div>
-            <h3 className="font-semibold text-foreground mb-2">Ekosistem Kampus</h3>
+            <h3 className="font-semibold text-foreground mb-2">
+              Ekosistem Kampus
+            </h3>
             <p className="text-sm text-muted-foreground">
               Dibangun khusus untuk kebutuhan komunitas kampus
             </p>

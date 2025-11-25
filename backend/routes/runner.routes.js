@@ -1,3 +1,4 @@
+// backend/routes/runner.routes.js
 const express = require("express");
 const router = express.Router();
 const User = require("../models/User.model");
@@ -152,17 +153,14 @@ router.post(
   protect,
   requireVerifiedRunner,
   async (req, res) => {
-    const session = await Order.startSession();
-    session.startTransaction();
-
+    // 🔥 REVISI: Transaction dihapus agar jalan di localhost
     try {
       const orderId = req.params.orderId;
 
-      // Find and lock the order
-      const order = await Order.findById(orderId).session(session);
+      // Find order (tanpa session)
+      const order = await Order.findById(orderId);
 
       if (!order) {
-        await session.abortTransaction();
         return res.status(404).json({
           success: false,
           message: "Pesanan tidak ditemukan",
@@ -171,7 +169,6 @@ router.post(
 
       // Validate order can be taken
       if (!order.canBeTaken()) {
-        await session.abortTransaction();
         return res.status(400).json({
           success: false,
           message: order.runner
@@ -182,7 +179,6 @@ router.post(
 
       // Cannot take own order
       if (order.consumer.toString() === req.user.id) {
-        await session.abortTransaction();
         return res.status(400).json({
           success: false,
           message: "Anda tidak dapat mengambil pesanan sendiri",
@@ -193,16 +189,14 @@ router.post(
       order.runner = req.user.id;
       order.status = "diambil";
       order.takenAt = new Date();
-      await order.save({ session });
 
-      // Update runner stats
-      await User.findByIdAndUpdate(
-        req.user.id,
-        { $inc: { "runnerStats.totalMissions": 1 } },
-        { session }
-      );
+      // Save tanpa session
+      await order.save();
 
-      await session.commitTransaction();
+      // Update runner stats tanpa session
+      await User.findByIdAndUpdate(req.user.id, {
+        $inc: { "runnerStats.totalMissions": 1 },
+      });
 
       // Populate for response
       await order.populate("consumer", "name phoneNumber campus whatsappLink");
@@ -214,14 +208,11 @@ router.post(
         nextStep: "Upload bukti foto pembelian/pengambilan barang",
       });
     } catch (error) {
-      await session.abortTransaction();
       console.error("Take Mission Error:", error);
       res.status(500).json({
         success: false,
         message: "Terjadi kesalahan saat mengambil misi",
       });
-    } finally {
-      session.endSession();
     }
   }
 );

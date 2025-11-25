@@ -7,22 +7,21 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { adminService } from "@/services/adminService";
-import { authService } from "@/services/authService";
 import {
   Users,
   Package,
   DollarSign,
-  TrendingUp,
-  CheckCircle,
   Clock,
   X,
   Loader2,
   ArrowLeft,
   Shield,
-  UserCheck,
-  FileText,
+  CheckCircle,
   Eye,
 } from "lucide-react";
+
+// 🔥 TAMBAHAN: URL BACKEND AGAR GAMBAR BISA DIBUKA
+const API_URL = "http://localhost:5000";
 
 interface PlatformStats {
   users: {
@@ -75,8 +74,8 @@ interface Order {
   description: string;
   orderType: string;
   status: string;
-  estimatedItemCost: number;
-  serviceFeeCuan: number;
+  estimatedItemCost: any;
+  serviceFeeCuan: any;
   consumer: {
     name: string;
     email: string;
@@ -96,23 +95,16 @@ const AdminDashboard = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [processing, setProcessing] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    checkAdminAccess();
     fetchData();
   }, []);
-
-  const checkAdminAccess = () => {
-    const user = authService.getUser();
-    if (!user || !user.roles.includes("admin")) {
-      alert("Akses ditolak. Anda bukan admin!");
-      navigate("/dashboard");
-    }
-  };
 
   const fetchData = async () => {
     try {
       setLoading(true);
+      setError(null);
 
       // Fetch stats
       const statsResponse = await adminService.getStats();
@@ -120,16 +112,30 @@ const AdminDashboard = () => {
         setStats(statsResponse.data);
       }
 
-      // Fetch pending verifications
-      const pendingResponse = await adminService.getPendingVerifications();
-      if (pendingResponse.success) {
-        setPendingRunners(pendingResponse.data);
-      }
-
-      // Fetch users
-      const usersResponse = await adminService.getUsers({ limit: 50 });
+      // Fetch all users then filter runners
+      const usersResponse = await adminService.getUsers({ limit: 100 });
       if (usersResponse.success) {
         setUsers(usersResponse.data);
+
+        // Filter semua users yang punya runnerVerification field (potential runners)
+        const allRunners = (usersResponse.data || []).filter(
+          (user: User) =>
+            user.runnerVerification &&
+            user.runnerVerification.status === "pending"
+        );
+
+        // Convert ke PendingRunner format
+        const formattedRunners = allRunners.map((user: User) => ({
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          phoneNumber: user.phoneNumber,
+          campus: user.campus,
+          runnerVerification: user.runnerVerification,
+          createdAt: user.createdAt,
+        }));
+
+        setPendingRunners(formattedRunners);
       }
 
       // Fetch orders
@@ -139,7 +145,7 @@ const AdminDashboard = () => {
       }
     } catch (error: any) {
       console.error("Fetch data error:", error);
-      alert(error.message || "Gagal memuat data admin");
+      setError(error.message || "Gagal memuat data admin");
     } finally {
       setLoading(false);
     }
@@ -154,6 +160,8 @@ const AdminDashboard = () => {
       if (response.success) {
         alert(`✅ ${name} berhasil diverifikasi!`);
         await fetchData();
+      } else {
+        alert(`Gagal approve: ${response.message}`);
       }
     } catch (error: any) {
       alert(error.message || "Gagal approve runner");
@@ -172,6 +180,8 @@ const AdminDashboard = () => {
       if (response.success) {
         alert(`❌ Verifikasi ${name} ditolak`);
         await fetchData();
+      } else {
+        alert(`Gagal reject: ${response.message}`);
       }
     } catch (error: any) {
       alert(error.message || "Gagal reject runner");
@@ -201,8 +211,18 @@ const AdminDashboard = () => {
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    return `Rp ${parseInt(amount.toString()).toLocaleString("id-ID")}`;
+  // Helper untuk buka foto KTM dengan URL yang benar
+  const openKtmPhoto = (path: string) => {
+    if (!path) return;
+    const fullUrl = path.startsWith("http") ? path : `${API_URL}${path}`;
+    window.open(fullUrl, "_blank");
+  };
+
+  const formatCurrency = (amount: any) => {
+    if (!amount) return "Rp 0";
+    let num = parseFloat(amount.toString());
+    if (amount.$numberDecimal) num = parseFloat(amount.$numberDecimal);
+    return `Rp ${num.toLocaleString("id-ID")}`;
   };
 
   if (loading) {
@@ -234,45 +254,49 @@ const AdminDashboard = () => {
           {/* Stats Cards */}
           {stats && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <Card className="p-4 bg-white/10 backdrop-blur border-white/20">
+              <Card className="p-4 bg-white border-0 shadow-lg">
                 <div className="flex items-center gap-2 mb-2">
-                  <Users className="h-5 w-5" />
-                  <p className="text-sm">Total Users</p>
+                  <Users className="h-5 w-5 text-purple-600" />
+                  <p className="text-sm text-gray-600">Total Users</p>
                 </div>
-                <p className="text-3xl font-bold">{stats.users.total}</p>
-                <p className="text-xs mt-1 opacity-90">
+                <p className="text-3xl font-bold text-gray-900">
+                  {stats.users.total}
+                </p>
+                <p className="text-xs mt-1 text-gray-500">
                   {stats.users.totalRunners} runners
                 </p>
               </Card>
 
-              <Card className="p-4 bg-white/10 backdrop-blur border-white/20">
+              <Card className="p-4 bg-white border-0 shadow-lg">
                 <div className="flex items-center gap-2 mb-2">
-                  <Clock className="h-5 w-5" />
-                  <p className="text-sm">Pending</p>
+                  <Clock className="h-5 w-5 text-yellow-600" />
+                  <p className="text-sm text-gray-600">Pending</p>
                 </div>
-                <p className="text-3xl font-bold">
+                <p className="text-3xl font-bold text-gray-900">
                   {stats.users.pendingVerifications}
                 </p>
-                <p className="text-xs mt-1 opacity-90">verifikasi</p>
+                <p className="text-xs mt-1 text-gray-500">verifikasi</p>
               </Card>
 
-              <Card className="p-4 bg-white/10 backdrop-blur border-white/20">
+              <Card className="p-4 bg-white border-0 shadow-lg">
                 <div className="flex items-center gap-2 mb-2">
-                  <Package className="h-5 w-5" />
-                  <p className="text-sm">Orders</p>
+                  <Package className="h-5 w-5 text-blue-600" />
+                  <p className="text-sm text-gray-600">Orders</p>
                 </div>
-                <p className="text-3xl font-bold">{stats.orders.total}</p>
-                <p className="text-xs mt-1 opacity-90">
+                <p className="text-3xl font-bold text-gray-900">
+                  {stats.orders.total}
+                </p>
+                <p className="text-xs mt-1 text-gray-500">
                   {stats.orders.active} aktif
                 </p>
               </Card>
 
-              <Card className="p-4 bg-white/10 backdrop-blur border-white/20">
+              <Card className="p-4 bg-white border-0 shadow-lg">
                 <div className="flex items-center gap-2 mb-2">
-                  <DollarSign className="h-5 w-5" />
-                  <p className="text-sm">Revenue</p>
+                  <DollarSign className="h-5 w-5 text-green-600" />
+                  <p className="text-sm text-gray-600">Revenue</p>
                 </div>
-                <p className="text-2xl font-bold">
+                <p className="text-2xl font-bold text-gray-900">
                   {formatCurrency(stats.revenue.totalPlatformFees)}
                 </p>
               </Card>
@@ -284,30 +308,30 @@ const AdminDashboard = () => {
             <TabsList className="grid w-full grid-cols-4 bg-white/10">
               <TabsTrigger
                 value="overview"
-                className="data-[state=active]:bg-white data-[state=active]:text-purple-600"
+                className="text-white data-[state=active]:bg-white data-[state=active]:text-purple-600"
               >
                 Overview
               </TabsTrigger>
               <TabsTrigger
                 value="verifications"
-                className="data-[state=active]:bg-white data-[state=active]:text-purple-600"
+                className="text-white data-[state=active]:bg-white data-[state=active]:text-purple-600"
               >
                 Verifikasi
                 {pendingRunners.length > 0 && (
-                  <Badge className="ml-2 bg-yellow-500">
+                  <Badge className="ml-2 bg-yellow-500 text-white">
                     {pendingRunners.length}
                   </Badge>
                 )}
               </TabsTrigger>
               <TabsTrigger
                 value="users"
-                className="data-[state=active]:bg-white data-[state=active]:text-purple-600"
+                className="text-white data-[state=active]:bg-white data-[state=active]:text-purple-600"
               >
                 Users
               </TabsTrigger>
               <TabsTrigger
                 value="orders"
-                className="data-[state=active]:bg-white data-[state=active]:text-purple-600"
+                className="text-white data-[state=active]:bg-white data-[state=active]:text-purple-600"
               >
                 Orders
               </TabsTrigger>
@@ -372,26 +396,40 @@ const AdminDashboard = () => {
 
           {/* Verifications Tab */}
           <TabsContent value="verifications" className="space-y-4">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-bold">Verifikasi Runner Pending</h2>
+              <Button onClick={() => fetchData()} variant="outline" size="sm">
+                🔄 Refresh
+              </Button>
+            </div>
+
             {pendingRunners.length === 0 ? (
-              <Card className="p-8 text-center">
+              <Card className="p-8 text-center bg-white">
                 <CheckCircle className="h-12 w-12 text-gray-400 mx-auto mb-3" />
                 <p className="text-gray-600">Tidak ada verifikasi pending</p>
               </Card>
             ) : (
               pendingRunners.map((runner) => (
-                <Card key={runner._id} className="p-4">
+                <Card
+                  key={runner._id}
+                  className="p-4 bg-white border border-gray-200 mb-3"
+                >
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
-                      <h3 className="font-bold text-lg">{runner.name}</h3>
+                      <h3 className="font-bold text-lg text-gray-900">
+                        {runner.name}
+                      </h3>
                       <p className="text-sm text-gray-600">{runner.email}</p>
                       <p className="text-sm text-gray-600">
                         {runner.phoneNumber} • {runner.campus}
                       </p>
                       <p className="text-xs text-gray-500 mt-2">
                         Diajukan:{" "}
-                        {new Date(
-                          runner.runnerVerification.submittedAt
-                        ).toLocaleString("id-ID")}
+                        {runner.runnerVerification?.submittedAt
+                          ? new Date(
+                              runner.runnerVerification.submittedAt
+                            ).toLocaleString("id-ID")
+                          : "-"}
                       </p>
                     </div>
                     <div className="flex gap-2">
@@ -400,14 +438,10 @@ const AdminDashboard = () => {
                           variant="outline"
                           size="sm"
                           onClick={() =>
-                            window.open(
-                              runner.runnerVerification.ktmPhoto,
-                              "_blank"
-                            )
+                            openKtmPhoto(runner.runnerVerification.ktmPhoto)
                           }
                         >
-                          <Eye className="h-4 w-4 mr-1" />
-                          Lihat KTM
+                          <Eye className="h-4 w-4 mr-1" /> Lihat KTM
                         </Button>
                       )}
                     </div>
@@ -425,8 +459,7 @@ const AdminDashboard = () => {
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
                         <>
-                          <CheckCircle className="h-4 w-4 mr-2" />
-                          Approve
+                          <CheckCircle className="h-4 w-4 mr-2" /> Approve
                         </>
                       )}
                     </Button>
@@ -438,8 +471,7 @@ const AdminDashboard = () => {
                       variant="destructive"
                       className="flex-1"
                     >
-                      <X className="h-4 w-4 mr-2" />
-                      Reject
+                      <X className="h-4 w-4 mr-2" /> Reject
                     </Button>
                   </div>
                 </Card>
@@ -450,12 +482,14 @@ const AdminDashboard = () => {
           {/* Users Tab */}
           <TabsContent value="users" className="space-y-4">
             {users.map((user) => (
-              <Card key={user._id} className="p-4">
+              <Card
+                key={user._id}
+                className="p-4 bg-white border border-gray-200 mb-2"
+              >
                 <div className="flex justify-between items-start">
                   <div>
-                    <h3 className="font-bold">{user.name}</h3>
+                    <h3 className="font-bold text-gray-900">{user.name}</h3>
                     <p className="text-sm text-gray-600">{user.email}</p>
-                    <p className="text-sm text-gray-600">{user.phoneNumber}</p>
                     <div className="flex gap-2 mt-2">
                       {user.roles.map((role) => (
                         <Badge key={role} variant="secondary">
@@ -486,17 +520,20 @@ const AdminDashboard = () => {
           {/* Orders Tab */}
           <TabsContent value="orders" className="space-y-4">
             {orders.map((order) => (
-              <Card key={order._id} className="p-4">
+              <Card
+                key={order._id}
+                className="p-4 bg-white border border-gray-200 mb-2"
+              >
                 <div className="flex justify-between items-start mb-2">
                   <div>
-                    <h3 className="font-bold">{order.title}</h3>
+                    <h3 className="font-bold text-gray-900">{order.title}</h3>
                     <p className="text-sm text-gray-600 line-clamp-1">
                       {order.description}
                     </p>
                   </div>
                   <Badge>{order.status}</Badge>
                 </div>
-                <div className="text-sm space-y-1">
+                <div className="text-sm text-gray-700 space-y-1">
                   <p>
                     <strong>Consumer:</strong> {order.consumer.name}
                   </p>

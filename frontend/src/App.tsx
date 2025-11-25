@@ -1,4 +1,4 @@
-// src/App.tsx
+// src/App.tsx - COMPLETE WITH ALL ROUTES
 import {
   BrowserRouter as Router,
   Routes,
@@ -17,6 +17,8 @@ import OrderHistory from "./pages/OrderHistory";
 import RunnerActivation from "./pages/RunnerActivation";
 import RunnerDashboard from "./pages/RunnerDashboard";
 import RunnerProfile from "./pages/RunnerProfile";
+import RunnerWithdrawal from "./pages/RunnerWithdrawal";
+import MissionDetail from "./pages/MissionDetail";
 import ConsumerProfile from "./pages/ConsumerProfile";
 import Payment from "./pages/Payment";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -39,13 +41,30 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
   const user = authService.getUser();
 
   if (!isAuthenticated) {
+    console.log("❌ Not authenticated");
     return <Navigate to="/auth" replace />;
   }
 
-  if (!user || !user.roles.includes("admin")) {
+  if (!user) {
+    console.log("❌ No user data");
     return <Navigate to="/dashboard" replace />;
   }
 
+  // ✅ ROBUST CHECK: Convert to string and check
+  const rolesString = JSON.stringify(user.roles || []).toLowerCase();
+  const hasAdminRole = rolesString.includes("admin");
+
+  console.log("🔍 Admin Check:");
+  console.log("  - User:", user.name);
+  console.log("  - Roles:", user.roles);
+  console.log("  - Has Admin?", hasAdminRole);
+
+  if (!hasAdminRole) {
+    console.log("❌ Access denied - Not an admin");
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  console.log("✅ Admin access granted!");
   return <>{children}</>;
 };
 
@@ -154,6 +173,22 @@ function App() {
           element={
             <ProtectedRoute>
               <RunnerProfile />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/runner-withdrawal"
+          element={
+            <ProtectedRoute>
+              <RunnerWithdrawal />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/mission-detail/:orderId"
+          element={
+            <ProtectedRoute>
+              <MissionDetail />
             </ProtectedRoute>
           }
         />

@@ -1,4 +1,4 @@
-// src/pages/Dashboard.tsx - UPDATED VERSION
+// src/pages/Dashboard.tsx - FINAL FIX TOMBOL ADMIN
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -15,9 +15,16 @@ import {
   Minus,
   Bell,
   User,
+  Loader2,
+  Lock,
+  Clock,
+  CheckCircle,
+  ShieldCheck,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { orderService } from "@/services/orderService";
+import { runnerService } from "@/services/runnerService";
+import { authService } from "@/services/authService";
 import nasiGorengImg from "@/assets/nasi-goreng.jpg";
 import kopiSusuImg from "@/assets/kopi-susu.jpg";
 import ayamGeprekImg from "@/assets/ayam-geprek.jpg";
@@ -30,14 +37,30 @@ const Dashboard = () => {
   const [cart, setCart] = useState<{ [key: number]: number }>({});
   const [showCart, setShowCart] = useState(false);
 
-  // Fetch active order on mount
+  const [checkingRunner, setCheckingRunner] = useState(false);
+  const [runnerStatus, setRunnerStatus] = useState<any>(null);
+
+  // 🔥 FIX LOGIC: Pengecekan Admin yang Lebih Pintar (Robust) 🔥
+  const user = authService.getUser();
+  // Kita ubah dulu jadi text string, baru dicek. Ini mengatasi masalah format database yg aneh.
+  const isAdmin =
+    user &&
+    JSON.stringify(user.roles || [])
+      .toLowerCase()
+      .includes("admin");
+
   useEffect(() => {
     fetchActiveOrder();
   }, []);
 
+  useEffect(() => {
+    if (role === "runner") {
+      checkRunnerVerification();
+    }
+  }, [role]);
+
   const fetchActiveOrder = async () => {
     try {
-      // Get orders that are in progress (diambil, sudah_dibeli, sedang_diantar)
       const response = await orderService.getMyOrders();
       if (response.success && response.data) {
         const inProgressOrder = response.data.find((order: any) =>
@@ -49,6 +72,24 @@ const Dashboard = () => {
       console.error("Failed to fetch active order:", error);
     } finally {
       setLoadingActiveOrder(false);
+    }
+  };
+
+  const checkRunnerVerification = async () => {
+    setCheckingRunner(true);
+    try {
+      const response = await runnerService.getVerificationStatus();
+      if (response.success && response.data) {
+        setRunnerStatus(response.data);
+        if (response.data.verificationStatus === "verified") {
+          navigate("/runner-dashboard", { replace: true });
+          return;
+        }
+      }
+    } catch (error) {
+      console.error("Failed to check runner status:", error);
+    } finally {
+      setCheckingRunner(false);
     }
   };
 
@@ -95,11 +136,8 @@ const Dashboard = () => {
   const removeFromCart = (itemId: number) => {
     setCart((prev) => {
       const newCart = { ...prev };
-      if (newCart[itemId] > 1) {
-        newCart[itemId]--;
-      } else {
-        delete newCart[itemId];
-      }
+      if (newCart[itemId] > 1) newCart[itemId]--;
+      else delete newCart[itemId];
       return newCart;
     });
   };
@@ -113,16 +151,112 @@ const Dashboard = () => {
     return sum + (item ? parseInt(item.price.replace(".", "")) * count : 0);
   }, 0);
 
+  const renderRunnerContent = () => {
+    if (checkingRunner) {
+      return (
+        <div className="text-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-3" />
+          <p className="text-muted-foreground">
+            Memeriksa status verifikasi...
+          </p>
+        </div>
+      );
+    }
+
+    if (!runnerStatus) {
+      return (
+        <div className="text-center py-12">
+          <Lock className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+          <h3 className="text-lg font-semibold mb-2">
+            Aktivasi Runner Diperlukan
+          </h3>
+          <p className="text-muted-foreground mb-4">
+            Verifikasi identitas untuk mulai menerima misi
+          </p>
+          <Button onClick={() => navigate("/runner-activation")} size="lg">
+            Mulai Verifikasi
+          </Button>
+        </div>
+      );
+    }
+
+    if (runnerStatus.verificationStatus === "pending") {
+      return (
+        <div className="text-center py-12">
+          <Clock className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold mb-2">
+            Verifikasi Dalam Proses
+          </h3>
+          <p className="text-muted-foreground mb-4">
+            Tim kami sedang memverifikasi dokumen Anda
+          </p>
+          <div className="p-4 border rounded-lg bg-card inline-block">
+            <p className="text-sm text-muted-foreground">
+              Estimasi: 1-2 hari kerja
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    if (runnerStatus.verificationStatus === "rejected") {
+      return (
+        <div className="text-center py-12">
+          <div className="h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
+            <Lock className="h-6 w-6 text-destructive" />
+          </div>
+          <h3 className="text-lg font-semibold mb-2">Verifikasi Ditolak</h3>
+          {runnerStatus.rejectionReason && (
+            <div className="p-4 border border-destructive/20 bg-destructive/5 rounded-lg mb-4 max-w-md mx-auto">
+              <p className="text-sm">
+                <strong>Alasan:</strong> {runnerStatus.rejectionReason}
+              </p>
+            </div>
+          )}
+          <Button onClick={() => navigate("/runner-activation")} size="lg">
+            Submit Ulang Dokumen
+          </Button>
+        </div>
+      );
+    }
+
+    if (runnerStatus.verificationStatus === "verified") {
+      navigate("/runner-dashboard", { replace: true });
+      return <Loader2 className="h-6 w-6 animate-spin text-primary mx-auto" />;
+    }
+
+    return (
+      <div className="text-center py-12">
+        <p className="text-muted-foreground mb-4">
+          Aktivasi akun Runner diperlukan
+        </p>
+        <Button onClick={() => navigate("/runner-activation")}>
+          Aktivasi Akun Runner
+        </Button>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-white via-primary/5 to-white">
-      {/* Header */}
       <header className="border-b border-border bg-white/80 backdrop-blur-md sticky top-0 z-10 shadow-sm">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
               TitipRek
             </h1>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              {/* 🔥 TOMBOL ADMIN (Hanya muncul kalau isAdmin = true) 🔥 */}
+              {isAdmin && (
+                <button
+                  onClick={() => navigate("/admin")}
+                  className="flex items-center gap-1 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-bold transition-colors text-sm border border-red-200 mr-1 shadow-sm"
+                >
+                  <ShieldCheck className="h-5 w-5" />
+                  <span className="hidden md:inline">Admin</span>
+                </button>
+              )}
+
               {role === "konsumen" && (
                 <button
                   onClick={() => setShowCart(!showCart)}
@@ -142,7 +276,7 @@ const Dashboard = () => {
               >
                 <Bell className="h-6 w-6 text-primary" />
                 {activeOrder && (
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
+                  <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
                 )}
               </button>
               <button
@@ -154,7 +288,6 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* Search Bar */}
           <div className="relative mb-4">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
             <Input
@@ -163,7 +296,6 @@ const Dashboard = () => {
             />
           </div>
 
-          {/* Role Switcher */}
           <Tabs
             value={role}
             onValueChange={(v) => setRole(v as "konsumen" | "runner")}
@@ -187,25 +319,20 @@ const Dashboard = () => {
         </div>
       </header>
 
-      {/* Content */}
       <main className="container mx-auto px-4 py-6">
         {role === "konsumen" ? (
           <>
-            {/* Category Navigation */}
             <div className="grid grid-cols-2 gap-4 mb-8">
               <Link to="/create-order?type=konsumsi">
                 <div className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary to-primary/80 p-6 h-32 flex flex-col items-center justify-center gap-2 shadow-lg hover:shadow-xl transition-all hover:scale-105">
-                  <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
                   <Utensils className="h-8 w-8 text-white relative z-10" />
                   <span className="text-sm font-semibold text-white relative z-10">
                     Kebutuhan Konsumsi
                   </span>
                 </div>
               </Link>
-
               <Link to="/create-order?type=logistik">
                 <div className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/90 to-primary/70 p-6 h-32 flex flex-col items-center justify-center gap-2 shadow-lg hover:shadow-xl transition-all hover:scale-105">
-                  <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
                   <Archive className="h-8 w-8 text-white relative z-10" />
                   <span className="text-sm font-semibold text-white relative z-10">
                     Tugas & Logistik
@@ -214,68 +341,57 @@ const Dashboard = () => {
               </Link>
             </div>
 
-            {/* Popular Section */}
             <section>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-foreground">
-                  Rekomendasi Populer 🔥
-                </h2>
-              </div>
+              <h2 className="text-xl font-bold text-foreground mb-4">
+                Rekomendasi Populer 🔥
+              </h2>
               <div className="space-y-4">
                 {popularItems.map((item) => (
                   <div
                     key={item.id}
-                    className="group relative overflow-hidden rounded-2xl bg-white border-2 border-primary/20 shadow-md hover:shadow-xl transition-all hover:scale-[1.02]"
+                    className="group flex gap-4 p-3 rounded-2xl bg-white border border-gray-100 shadow-sm hover:shadow-md transition-all"
                   >
-                    <div className="flex gap-4">
-                      <div className="w-28 h-28 flex-shrink-0 overflow-hidden rounded-l-2xl">
-                        <img
-                          src={item.image}
-                          alt={item.name}
-                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                        />
+                    <img
+                      src={item.image}
+                      alt={item.name}
+                      className="w-24 h-24 object-cover rounded-xl"
+                    />
+                    <div className="flex-1 flex flex-col justify-between py-1">
+                      <div>
+                        <h3 className="font-bold text-gray-800">{item.name}</h3>
+                        <p className="text-xs text-gray-500">{item.merchant}</p>
                       </div>
-                      <div className="flex-1 py-3 pr-4 flex flex-col justify-between">
-                        <div>
-                          <h3 className="font-bold text-foreground text-base mb-1">
-                            {item.name}
-                          </h3>
-                          <p className="text-xs text-muted-foreground">
-                            {item.merchant}
-                          </p>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-lg font-bold text-primary">
-                            Rp {item.price}
-                          </span>
-                          {cart[item.id] ? (
-                            <div className="flex items-center gap-2 bg-primary/10 rounded-full px-2 py-1">
-                              <button
-                                onClick={() => removeFromCart(item.id)}
-                                className="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center hover:bg-primary/90"
-                              >
-                                <Minus className="h-3 w-3" />
-                              </button>
-                              <span className="text-sm font-semibold text-primary w-4 text-center">
-                                {cart[item.id]}
-                              </span>
-                              <button
-                                onClick={() => addToCart(item.id)}
-                                className="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center hover:bg-primary/90"
-                              >
-                                <Plus className="h-3 w-3" />
-                              </button>
-                            </div>
-                          ) : (
-                            <Button
-                              size="sm"
-                              onClick={() => addToCart(item.id)}
-                              className="bg-primary hover:bg-primary/90 rounded-full px-4 shadow-md"
+                      <div className="flex items-center justify-between">
+                        <span className="text-primary font-bold">
+                          Rp {item.price}
+                        </span>
+                        {cart[item.id] ? (
+                          <div className="flex items-center gap-2 bg-primary/10 rounded-full px-2 py-1">
+                            <button
+                              onClick={() => removeFromCart(item.id)}
+                              className="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center"
                             >
-                              + Keranjang
-                            </Button>
-                          )}
-                        </div>
+                              <Minus className="h-3 w-3" />
+                            </button>
+                            <span className="text-sm font-bold text-primary w-4 text-center">
+                              {cart[item.id]}
+                            </span>
+                            <button
+                              onClick={() => addToCart(item.id)}
+                              className="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center"
+                            >
+                              <Plus className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <Button
+                            size="sm"
+                            onClick={() => addToCart(item.id)}
+                            className="rounded-full px-4 h-8 text-xs"
+                          >
+                            Tambah
+                          </Button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -283,18 +399,17 @@ const Dashboard = () => {
               </div>
             </section>
 
-            {/* Cart Sidebar */}
             {showCart && (
               <div
-                className="fixed inset-0 bg-black/50 z-30 animate-fade-in"
+                className="fixed inset-0 z-50 bg-black/50"
                 onClick={() => setShowCart(false)}
               >
                 <div
-                  className="fixed right-0 top-0 bottom-0 w-80 bg-white shadow-2xl p-6 animate-slide-in-right overflow-y-auto"
+                  className="absolute right-0 top-0 bottom-0 w-80 bg-white p-6"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-xl font-bold">Keranjang Belanja</h2>
+                  <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-xl font-bold">Keranjang</h2>
                     <button
                       onClick={() => setShowCart(false)}
                       className="text-2xl"
@@ -302,130 +417,72 @@ const Dashboard = () => {
                       &times;
                     </button>
                   </div>
-
                   {Object.keys(cart).length === 0 ? (
-                    <div className="text-center py-12">
-                      <ShoppingCart className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-                      <p className="text-muted-foreground">
-                        Keranjang masih kosong
-                      </p>
+                    <div className="text-center py-10 text-gray-400">
+                      Keranjang kosong
                     </div>
                   ) : (
-                    <>
-                      <div className="space-y-4 mb-6">
-                        {Object.entries(cart).map(([itemId, count]) => {
-                          const item = popularItems.find(
-                            (i) => i.id === Number(itemId)
-                          );
-                          if (!item) return null;
-                          return (
-                            <div
-                              key={itemId}
-                              className="flex gap-3 p-3 border rounded-xl"
-                            >
-                              <img
-                                src={item.image}
-                                alt={item.name}
-                                className="w-16 h-16 object-cover rounded-lg"
-                              />
-                              <div className="flex-1">
-                                <h3 className="font-semibold text-sm">
-                                  {item.name}
-                                </h3>
-                                <p className="text-primary font-bold text-sm">
-                                  Rp {item.price}
-                                </p>
-                                <div className="flex items-center gap-2 mt-2">
-                                  <button
-                                    onClick={() =>
-                                      removeFromCart(Number(itemId))
-                                    }
-                                    className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center"
-                                  >
-                                    <Minus className="h-3 w-3" />
-                                  </button>
-                                  <span className="text-sm font-semibold w-4 text-center">
-                                    {count}
-                                  </span>
-                                  <button
-                                    onClick={() => addToCart(Number(itemId))}
-                                    className="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center"
-                                  >
-                                    <Plus className="h-3 w-3" />
-                                  </button>
-                                </div>
-                              </div>
+                    <div className="space-y-4">
+                      {Object.entries(cart).map(([itemId, count]) => {
+                        const item = popularItems.find(
+                          (i) => i.id === Number(itemId)
+                        );
+                        if (!item) return null;
+                        return (
+                          <div
+                            key={itemId}
+                            className="flex justify-between items-center"
+                          >
+                            <div className="text-sm">
+                              <p className="font-bold">{item.name}</p>
+                              <p className="text-gray-500">
+                                {count} x Rp {item.price}
+                              </p>
                             </div>
-                          );
-                        })}
-                      </div>
-
-                      <div className="border-t pt-4 mb-4">
-                        <div className="flex justify-between items-center mb-4">
-                          <span className="text-lg font-bold">Total</span>
-                          <span className="text-2xl font-bold text-primary">
-                            Rp {cartTotal.toLocaleString("id-ID")}
-                          </span>
+                            <p className="font-bold text-primary">
+                              Rp{" "}
+                              {(
+                                parseInt(item.price.replace(".", "")) * count
+                              ).toLocaleString("id-ID")}
+                            </p>
+                          </div>
+                        );
+                      })}
+                      <div className="border-t pt-4 mt-4">
+                        <div className="flex justify-between font-bold text-lg mb-4">
+                          <span>Total</span>
+                          <span>Rp {cartTotal.toLocaleString("id-ID")}</span>
                         </div>
                         <Link to="/create-order">
-                          <Button className="w-full bg-primary hover:bg-primary/90 rounded-xl h-12 text-base font-semibold">
-                            Checkout Sekarang
-                          </Button>
+                          <Button className="w-full">Checkout</Button>
                         </Link>
                       </div>
-                    </>
+                    </div>
                   )}
                 </div>
               </div>
             )}
           </>
         ) : (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground mb-4">
-              Aktivasi akun Runner diperlukan untuk melihat daftar tugas
-            </p>
-            <Link to="/runner-activation">
-              <Button>Aktivasi Akun Runner</Button>
-            </Link>
-          </div>
+          renderRunnerContent()
         )}
       </main>
 
-      {/* Floating Active Order Bar - ONLY SHOW IF THERE'S ACTIVE ORDER */}
       {role === "konsumen" && activeOrder && !loadingActiveOrder && (
         <div
-          className="fixed bottom-0 left-0 right-0 bg-gradient-to-r from-primary to-primary/90 px-4 py-3 shadow-2xl z-20 border-t-2 border-white/20 cursor-pointer hover:from-primary/90 hover:to-primary/80 transition-colors"
+          className="fixed bottom-0 left-0 right-0 bg-white border-t px-4 py-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-20 cursor-pointer"
           onClick={() => navigate(`/order-tracking/${activeOrder._id}`)}
         >
           <div className="container mx-auto flex items-center justify-between">
-            <div className="text-white text-sm font-semibold">
-              {getStatusText(activeOrder.status)}:{" "}
-              {activeOrder.runner?.name || "Menunggu Runner"}
+            <div>
+              <p className="text-xs text-gray-500">Status Pesanan</p>
+              <p className="text-sm font-bold text-primary">
+                {getStatusText(activeOrder.status)}
+              </p>
             </div>
-            <div className="flex items-center gap-2">
-              {activeOrder.runner && (
-                <a
-                  href={activeOrder.runner.whatsappLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <Button
-                    size="sm"
-                    className="h-8 bg-white text-primary hover:bg-white/90 font-semibold"
-                  >
-                    <MessageCircle className="h-4 w-4 mr-1" />
-                    WA
-                  </Button>
-                </a>
-              )}
-              <Button
-                size="sm"
-                className="h-8 bg-white/20 text-white hover:bg-white/30 border border-white/30 font-semibold"
-              >
-                Lihat Rincian &gt;
-              </Button>
-            </div>
+            <Button size="sm" variant="outline" className="h-8 text-xs">
+              Lihat
+            </Button>
           </div>
         </div>
       )}

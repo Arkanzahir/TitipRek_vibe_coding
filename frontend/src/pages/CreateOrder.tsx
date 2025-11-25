@@ -1,331 +1,284 @@
 // src/pages/CreateOrder.tsx
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Card } from "@/components/ui/card";
+import { ArrowLeft, Loader2, Upload } from "lucide-react"; // 🔥 Import ArrowLeft
 import { orderService } from "@/services/orderService";
 
 const CreateOrder = () => {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [searchParams] = useSearchParams();
+  const defaultType =
+    searchParams.get("type") === "logistik" ? "jasa" : "makanan";
 
+  const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
-    orderType: "makanan",
+    orderType: defaultType,
     title: "",
     description: "",
     estimatedItemCost: "",
     serviceFeeCuan: "",
-    pickupLocation: {
-      name: "",
-      address: "",
-    },
-    deliveryLocation: {
-      name: "",
-      address: "",
-    },
-    deadline: "",
+    pickupLocation: "",
+    pickupAddress: "",
+    deliveryLocation: "",
+    deliveryAddress: "",
+    deadlineDate: "",
+    deadlineTime: "",
     notes: "",
-    isUrgent: false,
   });
 
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-
-    if (name.includes(".")) {
-      // Handle nested objects (pickupLocation, deliveryLocation)
-      const [parent, child] = name.split(".");
-      setFormData((prev) => ({
-        ...prev,
-        [parent]: {
-          ...prev[parent],
-          [child]: value,
-        },
-      }));
-    } else {
-      setFormData((prev) => ({
-        ...prev,
-        [name]: type === "checkbox" ? checked : value,
-      }));
-    }
-
-    if (error) setError("");
+  const handleChange = (e: any) => {
+    const { id, value } = e.target;
+    setFormData((prev) => ({ ...prev, [id]: value }));
   };
 
-  const validateForm = () => {
-    if (!formData.title || formData.title.length < 5) {
-      setError("Judul minimal 5 karakter");
-      return false;
-    }
-    if (!formData.description || formData.description.length < 10) {
-      setError("Deskripsi minimal 10 karakter");
-      return false;
-    }
-    if (
-      !formData.estimatedItemCost ||
-      parseFloat(formData.estimatedItemCost) <= 0
-    ) {
-      setError("Estimasi dana talangan harus diisi dengan benar");
-      return false;
-    }
-    if (!formData.serviceFeeCuan || parseFloat(formData.serviceFeeCuan) <= 0) {
-      setError("Biaya jasa runner harus diisi dengan benar");
-      return false;
-    }
-    if (!formData.pickupLocation.name || !formData.pickupLocation.address) {
-      setError("Lokasi pengambilan harus diisi lengkap");
-      return false;
-    }
-    if (!formData.deliveryLocation.name || !formData.deliveryLocation.address) {
-      setError("Lokasi pengantaran harus diisi lengkap");
-      return false;
-    }
-    if (!formData.deadline) {
-      setError("Deadline harus diisi");
-      return false;
-    }
-
-    // Validate deadline is in future
-    if (new Date(formData.deadline) <= new Date()) {
-      setError("Deadline harus di masa depan");
-      return false;
-    }
-
-    return true;
+  const handleSelectChange = (value: string) => {
+    setFormData((prev) => ({ ...prev, orderType: value }));
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
-
-    if (!validateForm()) return;
-
     setLoading(true);
 
     try {
-      // Prepare data sesuai dengan backend model
-      const orderData = {
-        ...formData,
-        estimatedItemCost: parseFloat(formData.estimatedItemCost),
-        serviceFeeCuan: parseFloat(formData.serviceFeeCuan),
-        deadline: new Date(formData.deadline).toISOString(),
+      // Gabungkan date & time untuk deadline
+      const deadline = new Date(
+        `${formData.deadlineDate}T${formData.deadlineTime}`
+      );
+
+      const payload = {
+        orderType: formData.orderType,
+        title: formData.title,
+        description: formData.description,
+        estimatedItemCost: parseInt(formData.estimatedItemCost),
+        serviceFeeCuan: parseInt(formData.serviceFeeCuan),
+        pickupLocation: {
+          name: formData.pickupLocation,
+          address: formData.pickupAddress,
+        },
+        deliveryLocation: {
+          name: formData.deliveryLocation,
+          address: formData.deliveryAddress,
+        },
+        deadline: deadline.toISOString(),
+        notes: formData.notes,
+        isUrgent: false, // Bisa ditambah toggle nanti
       };
 
-      const response = await orderService.createOrder(orderData);
+      const response = await orderService.createOrder(payload);
 
       if (response.success) {
         alert("Pesanan berhasil dibuat!");
-        navigate(`/order-tracking/${response.data._id}`);
+        navigate("/dashboard"); // Balik ke dashboard setelah sukses
       } else {
-        setError(response.message || "Gagal membuat pesanan");
+        alert("Gagal membuat pesanan: " + response.message);
       }
-    } catch (err) {
-      console.error("Create Order Error:", err);
-      setError(err.message || "Terjadi kesalahan. Silakan coba lagi.");
+    } catch (error: any) {
+      console.error(error);
+      alert("Terjadi kesalahan: " + error.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const totalCost =
-    (parseFloat(formData.estimatedItemCost) || 0) +
-    (parseFloat(formData.serviceFeeCuan) || 0);
-
   return (
-    <div className="min-h-screen bg-gray-50 p-4">
+    <div className="min-h-screen bg-gray-50 p-4 pb-20">
       <div className="max-w-2xl mx-auto bg-white rounded-xl shadow-lg p-6">
-        <h1 className="text-2xl font-bold text-teal-600 mb-6">
-          Buat Pesanan Baru
-        </h1>
-
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
-            {error}
-          </div>
-        )}
+        {/* 🔥 HEADER DENGAN TOMBOL KEMBALI 🔥 */}
+        <div className="flex items-center gap-3 mb-6">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate("/dashboard")}
+            className="hover:bg-gray-100 rounded-full"
+          >
+            <ArrowLeft className="h-6 w-6 text-gray-700" />
+          </Button>
+          <h1 className="text-2xl font-bold text-teal-600">
+            Buat Pesanan Baru
+          </h1>
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Order Type */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Tipe Pesanan *
-            </label>
-            <select
-              name="orderType"
-              value={formData.orderType}
-              onChange={handleChange}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
+          {/* Tipe Pesanan */}
+          <div className="space-y-2">
+            <Label>Tipe Pesanan *</Label>
+            <Select
+              defaultValue={formData.orderType}
+              onValueChange={handleSelectChange}
             >
-              <option value="makanan">Makanan/Minuman</option>
-              <option value="jasa">Jasa Titip</option>
-            </select>
+              <SelectTrigger>
+                <SelectValue placeholder="Pilih tipe" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="makanan">Makanan/Minuman</SelectItem>
+                <SelectItem value="jasa">Jasa/Logistik</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
-          {/* Title */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Judul Pesanan * (min 5 karakter)
-            </label>
-            <input
-              type="text"
-              name="title"
+          {/* Detail Utama */}
+          <div className="space-y-2">
+            <Label htmlFor="title">Judul Pesanan * (min 5 karakter)</Label>
+            <Input
+              id="title"
+              placeholder="Contoh: Nasi Goreng Spesial Bu Sri"
               value={formData.title}
               onChange={handleChange}
-              placeholder="Contoh: Nasi Goreng Spesial Bu Sri"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
+              required
+              minLength={5}
             />
           </div>
 
-          {/* Description */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Deskripsi * (min 10 karakter)
-            </label>
-            <textarea
-              name="description"
+          <div className="space-y-2">
+            <Label htmlFor="description">Deskripsi * (min 10 karakter)</Label>
+            <Textarea
+              id="description"
+              placeholder="Detail pesanan, varian, dll"
               value={formData.description}
               onChange={handleChange}
-              placeholder="Detail pesanan, varian, dll"
-              rows={3}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
+              required
+              minLength={10}
             />
           </div>
 
-          {/* Financial Separation */}
-          <div className="bg-teal-50 p-4 rounded-lg space-y-3">
-            <h3 className="font-semibold text-teal-800">Rincian Biaya</h3>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Estimasi Dana Talangan Barang * (Rp)
-              </label>
-              <input
-                type="number"
-                name="estimatedItemCost"
-                value={formData.estimatedItemCost}
-                onChange={handleChange}
-                placeholder="15000"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Biaya Jasa Runner (Cuan) * (Rp)
-              </label>
-              <input
-                type="number"
-                name="serviceFeeCuan"
-                value={formData.serviceFeeCuan}
-                onChange={handleChange}
-                placeholder="5000"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-              />
-            </div>
-
-            <div className="pt-2 border-t border-teal-200">
-              <p className="text-lg font-bold text-teal-800">
-                Total: Rp {totalCost.toLocaleString("id-ID")}
-              </p>
+          {/* Biaya */}
+          <div className="p-4 bg-teal-50 rounded-lg space-y-4 border border-teal-100">
+            <h3 className="font-bold text-teal-800">Rincian Biaya</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="estimatedItemCost">
+                  Estimasi Harga Barang (Rp)*
+                </Label>
+                <Input
+                  id="estimatedItemCost"
+                  type="number"
+                  placeholder="15000"
+                  value={formData.estimatedItemCost}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="serviceFeeCuan">Tip Runner (Cuan) (Rp)*</Label>
+                <Input
+                  id="serviceFeeCuan"
+                  type="number"
+                  placeholder="5000"
+                  value={formData.serviceFeeCuan}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
             </div>
           </div>
 
-          {/* Pickup Location */}
-          <div className="space-y-3">
-            <h3 className="font-semibold text-gray-800">
-              Lokasi Pengambilan *
-            </h3>
-            <input
-              type="text"
-              name="pickupLocation.name"
-              value={formData.pickupLocation.name}
-              onChange={handleChange}
-              placeholder="Nama tempat (contoh: Warung Bu Sri)"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-            />
-            <input
-              type="text"
-              name="pickupLocation.address"
-              value={formData.pickupLocation.address}
-              onChange={handleChange}
-              placeholder="Alamat lengkap"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-            />
-          </div>
+          {/* Lokasi */}
+          <div className="space-y-4">
+            <h3 className="font-bold text-gray-800">Lokasi</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="pickupLocation">Nama Lokasi Ambil *</Label>
+                <Input
+                  id="pickupLocation"
+                  placeholder="Contoh: Kantin Pusat"
+                  value={formData.pickupLocation}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="pickupAddress">Detail Alamat Ambil *</Label>
+                <Input
+                  id="pickupAddress"
+                  placeholder="Lantai 1, Stan No. 3"
+                  value={formData.pickupAddress}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+            </div>
 
-          {/* Delivery Location */}
-          <div className="space-y-3">
-            <h3 className="font-semibold text-gray-800">
-              Lokasi Pengantaran *
-            </h3>
-            <input
-              type="text"
-              name="deliveryLocation.name"
-              value={formData.deliveryLocation.name}
-              onChange={handleChange}
-              placeholder="Nama tempat (contoh: Gedung A)"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-            />
-            <input
-              type="text"
-              name="deliveryLocation.address"
-              value={formData.deliveryLocation.address}
-              onChange={handleChange}
-              placeholder="Alamat lengkap (contoh: Lantai 3, Ruang 302)"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="deliveryLocation">Nama Lokasi Antar *</Label>
+                <Input
+                  id="deliveryLocation"
+                  placeholder="Contoh: Gedung Kuliah A"
+                  value={formData.deliveryLocation}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="deliveryAddress">Detail Alamat Antar *</Label>
+                <Input
+                  id="deliveryAddress"
+                  placeholder="Ruang A-102"
+                  value={formData.deliveryAddress}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+            </div>
           </div>
 
           {/* Deadline */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Deadline *
-            </label>
-            <input
-              type="datetime-local"
-              name="deadline"
-              value={formData.deadline}
-              onChange={handleChange}
-              min={new Date().toISOString().slice(0, 16)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-            />
+          <div className="space-y-2">
+            <Label>Batas Waktu (Deadline) *</Label>
+            <div className="flex gap-4">
+              <Input
+                id="deadlineDate"
+                type="date"
+                value={formData.deadlineDate}
+                onChange={handleChange}
+                required
+                className="flex-1"
+              />
+              <Input
+                id="deadlineTime"
+                type="time"
+                value={formData.deadlineTime}
+                onChange={handleChange}
+                required
+                className="w-32"
+              />
+            </div>
           </div>
 
-          {/* Notes */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Catatan Tambahan
-            </label>
-            <textarea
-              name="notes"
+          <div className="space-y-2">
+            <Label htmlFor="notes">Catatan Tambahan (Opsional)</Label>
+            <Textarea
+              id="notes"
+              placeholder="Jangan terlalu pedas, minta sendok plastik..."
               value={formData.notes}
               onChange={handleChange}
-              placeholder="Catatan khusus untuk runner"
-              rows={2}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
             />
           </div>
 
-          {/* Urgent Flag */}
-          <div className="flex items-center">
-            <input
-              type="checkbox"
-              name="isUrgent"
-              checked={formData.isUrgent}
-              onChange={handleChange}
-              className="w-5 h-5 text-teal-500 rounded focus:ring-2 focus:ring-teal-500"
-            />
-            <label className="ml-3 text-sm font-medium text-gray-700">
-              Tandai sebagai pesanan mendesak
-            </label>
-          </div>
-
-          {/* Submit Button */}
           <Button
             type="submit"
+            className="w-full bg-teal-600 hover:bg-teal-700 text-lg h-12 font-bold"
             disabled={loading}
-            className="w-full bg-teal-500 hover:bg-teal-600 text-white py-3 rounded-lg font-semibold"
           >
-            {loading ? "Memproses..." : "Buat Pesanan"}
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Memproses...
+              </>
+            ) : (
+              "Buat Pesanan Sekarang"
+            )}
           </Button>
         </form>
       </div>

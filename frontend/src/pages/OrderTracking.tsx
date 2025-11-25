@@ -1,5 +1,5 @@
 // src/pages/OrderTracking.tsx
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,82 +12,68 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Card } from "@/components/ui/card";
 import { orderService } from "@/services/orderService";
+import { authService } from "@/services/authService";
+import { runnerService } from "@/services/runnerService";
 import {
   MapPin,
   Clock,
-  DollarSign,
   User,
-  Phone,
   MessageCircle,
   CheckCircle,
-  Package,
-  Truck,
   Star,
   AlertCircle,
   ArrowLeft,
   Loader2,
+  Camera,
 } from "lucide-react";
 
+// Interface
 interface Order {
   _id: string;
   title: string;
   description: string;
-  orderType: string;
-  estimatedItemCost: number;
-  serviceFeeCuan: number;
-  totalCost: number;
   status: string;
-  pickupLocation: {
-    name: string;
-    address: string;
-  };
-  deliveryLocation: {
-    name: string;
-    address: string;
-  };
+  estimatedItemCost: any;
+  serviceFeeCuan: any;
   deadline: string;
+  pickupLocation: { name: string; address: string };
+  deliveryLocation: { name: string; address: string };
   notes: string;
   isUrgent: boolean;
   runner?: {
     _id: string;
+    id?: string;
     name: string;
-    phoneNumber: string;
     campus: string;
-    whatsappLink: string;
     profilePhoto?: string;
-    runnerStats: {
-      averageRating: number;
-      totalReviews: number;
-      completedMissions: number;
-    };
+    whatsappLink: string;
+    runnerStats: { averageRating: number; totalReviews: number };
+  };
+  consumer: {
+    name: string;
+    profilePhoto?: string;
+    whatsappLink?: string;
   };
   workflowProofs: {
-    proof1Purchase: {
-      photoUrl?: string;
-      uploadedAt?: string;
-      notes?: string;
-    };
-    proof2Delivery: {
-      photoUrl?: string;
-      uploadedAt?: string;
-      notes?: string;
-    };
+    proof1Purchase: { photoUrl?: string; uploadedAt?: string; notes?: string };
+    proof2Delivery: { photoUrl?: string; uploadedAt?: string; notes?: string };
   };
   createdAt: string;
   takenAt?: string;
-  rating?: {
-    stars: number;
-    comment: string;
-  };
+  rating?: { stars: number; comment: string };
 }
 
 const OrderTracking = () => {
   const { orderId } = useParams();
   const navigate = useNavigate();
+
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [uploading, setUploading] = useState(false);
+
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [showRatingDialog, setShowRatingDialog] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -95,30 +81,80 @@ const OrderTracking = () => {
   const [ratingComment, setRatingComment] = useState("");
   const [submittingRating, setSubmittingRating] = useState(false);
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const currentUser = authService.getUser();
+
   useEffect(() => {
-    if (!orderId) {
-      setError("Order ID tidak ditemukan");
-      setLoading(false);
-      return;
-    }
+    if (!orderId) return;
     fetchOrderDetail();
-    const interval = setInterval(fetchOrderDetail, 10000); // Refresh every 10s
-    return () => clearInterval(interval);
   }, [orderId]);
 
   const fetchOrderDetail = async () => {
-    if (!orderId) return;
-
     try {
-      const response = await orderService.getOrderDetail(orderId);
+      const response = await orderService.getOrderDetail(orderId!);
       if (response.success) {
         setOrder(response.data);
       }
     } catch (err: any) {
-      setError(err.message || "Gagal memuat data pesanan");
+      setError(err.message || "Gagal memuat data");
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleBack = () => {
+    const isMyMission =
+      order?.runner?._id === currentUser?.id ||
+      order?.runner?.id === currentUser?.id;
+    if (isMyMission) {
+      navigate("/runner-dashboard");
+    } else {
+      navigate("/dashboard");
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !order) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert("Ukuran file terlalu besar (Max 5MB)");
+      return;
+    }
+
+    setUploading(true);
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onloadend = async () => {
+      const base64String = reader.result as string;
+      try {
+        let response;
+        if (order.status === "diambil") {
+          response = await runnerService.uploadProof1(
+            order._id,
+            base64String,
+            "Bukti Pembelian"
+          );
+        } else if (order.status === "sudah_dibeli") {
+          response = await runnerService.uploadProof2(
+            order._id,
+            base64String,
+            "Bukti Pengantaran"
+          );
+        }
+
+        if (response?.success) {
+          alert("Bukti berhasil diupload! ✅");
+          fetchOrderDetail();
+        } else {
+          alert("Gagal upload: " + response?.message);
+        }
+      } catch (error) {
+        alert("Terjadi kesalahan saat upload");
+      } finally {
+        setUploading(false);
+      }
+    };
   };
 
   const handleConfirmComplete = async () => {
@@ -131,7 +167,7 @@ const OrderTracking = () => {
         setShowRatingDialog(true);
       }
     } catch (err: any) {
-      alert(err.message || "Gagal konfirmasi pesanan");
+      alert(err.message || "Gagal konfirmasi");
     } finally {
       setConfirming(false);
     }
@@ -139,10 +175,9 @@ const OrderTracking = () => {
 
   const handleSubmitRating = async () => {
     if (rating === 0) {
-      alert("Silakan pilih rating bintang");
+      alert("Pilih bintang dulu");
       return;
     }
-
     setSubmittingRating(true);
     try {
       const response = await orderService.rateOrder(
@@ -153,186 +188,99 @@ const OrderTracking = () => {
       if (response.success) {
         await fetchOrderDetail();
         setShowRatingDialog(false);
-        alert("Terima kasih atas rating Anda! ⭐");
+        alert("Pesanan Selesai! Terima kasih ⭐");
+        navigate("/order-history");
       }
     } catch (err: any) {
-      alert(err.message || "Gagal memberikan rating");
+      alert(err.message);
     } finally {
       setSubmittingRating(false);
     }
   };
 
-  const getStatusInfo = (status: string) => {
-    const statusMap: Record<
-      string,
-      { label: string; color: string; icon: any }
-    > = {
-      terbuka: {
-        label: "Menunggu Runner",
-        color: "bg-blue-500",
-        icon: Clock,
-      },
-      diambil: {
-        label: "Diambil Runner",
-        color: "bg-purple-500",
-        icon: User,
-      },
-      sudah_dibeli: {
-        label: "Barang Sudah Dibeli",
-        color: "bg-yellow-500",
-        icon: Package,
-      },
-      sedang_diantar: {
-        label: "Sedang Diantar",
-        color: "bg-orange-500",
-        icon: Truck,
-      },
-      selesai: {
-        label: "Selesai",
-        color: "bg-green-500",
-        icon: CheckCircle,
-      },
-      dibatalkan: {
-        label: "Dibatalkan",
-        color: "bg-red-500",
-        icon: AlertCircle,
-      },
-    };
-    return statusMap[status] || statusMap.terbuka;
-  };
-
   const formatCurrency = (amount: any) => {
     if (!amount) return "0";
-
-    let numAmount: number;
-
-    // Handle different types of amount from MongoDB
-    if (typeof amount === "object" && amount.$numberDecimal) {
-      // Decimal128 with $numberDecimal property
-      numAmount = parseFloat(amount.$numberDecimal);
-    } else if (typeof amount === "number") {
-      // Already a number
-      numAmount = amount;
-    } else if (typeof amount === "string") {
-      // String number
-      numAmount = parseFloat(amount);
-    } else if (amount.toString) {
-      // Has toString method (Decimal128 object)
-      numAmount = parseFloat(amount.toString());
-    } else {
-      numAmount = 0;
-    }
-
-    return numAmount.toLocaleString("id-ID");
+    let num = parseFloat(amount.toString());
+    if (amount.$numberDecimal) num = parseFloat(amount.$numberDecimal);
+    return num.toLocaleString("id-ID");
   };
 
   const getTimelineSteps = () => {
-    const steps = [
-      {
-        label: "Pesanan Dibuat",
-        time: order?.createdAt,
-        completed: true,
-      },
+    if (!order) return [];
+    return [
+      { label: "Pesanan Dibuat", time: order.createdAt, completed: true },
       {
         label: "Diambil Runner",
-        time: order?.takenAt,
-        completed: order?.status !== "terbuka",
-        runner: order?.runner,
+        time: order.takenAt,
+        completed: order.status !== "terbuka",
       },
       {
         label: "Barang Dibeli",
-        time: order?.workflowProofs.proof1Purchase.uploadedAt,
-        completed: !!order?.workflowProofs.proof1Purchase.photoUrl,
-        photo: order?.workflowProofs.proof1Purchase.photoUrl,
-        notes: order?.workflowProofs.proof1Purchase.notes,
+        time: order.workflowProofs.proof1Purchase.uploadedAt,
+        completed: !!order.workflowProofs.proof1Purchase.photoUrl,
+        photo: order.workflowProofs.proof1Purchase.photoUrl,
       },
       {
         label: "Sedang Diantar",
-        time: order?.workflowProofs.proof2Delivery.uploadedAt,
-        completed: !!order?.workflowProofs.proof2Delivery.photoUrl,
-        photo: order?.workflowProofs.proof2Delivery.photoUrl,
-        notes: order?.workflowProofs.proof2Delivery.notes,
+        time: order.workflowProofs.proof2Delivery.uploadedAt,
+        completed: !!order.workflowProofs.proof2Delivery.photoUrl,
+        photo: order.workflowProofs.proof2Delivery.photoUrl,
       },
       {
         label: "Selesai",
         time:
-          order?.status === "selesai"
-            ? order?.workflowProofs.proof2Delivery.uploadedAt
+          order.status === "selesai"
+            ? order.workflowProofs.proof2Delivery.uploadedAt
             : undefined,
-        completed: order?.status === "selesai",
+        completed: order.status === "selesai",
       },
     ];
-    return steps;
   };
 
-  if (loading) {
+  if (loading)
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-teal-500" />
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="animate-spin text-teal-600" />
       </div>
     );
-  }
+  if (!order)
+    return <div className="text-center py-20">Pesanan tidak ditemukan</div>;
 
-  if (error || !order) {
-    return (
-      <div className="min-h-screen bg-gray-50 p-4">
-        <div className="max-w-2xl mx-auto bg-white rounded-xl shadow-lg p-6">
-          <p className="text-red-600">{error || "Pesanan tidak ditemukan"}</p>
-          <Button onClick={() => navigate("/dashboard")} className="mt-4">
-            Kembali ke Dashboard
-          </Button>
-        </div>
-      </div>
-    );
-  }
+  const isMyMission =
+    order.runner?._id === currentUser?.id ||
+    order.runner?.id === currentUser?.id;
+  const showUploadAction =
+    isMyMission &&
+    (order.status === "diambil" || order.status === "sudah_dibeli");
 
-  const statusInfo = getStatusInfo(order.status);
-  const StatusIcon = statusInfo.icon;
+  // 🔥 UPDATE LOGIC TOMBOL 🔥
+  const showConfirmButton = !isMyMission && order.status === "sedang_diantar";
+  const showRateButton =
+    !isMyMission &&
+    order.status === "selesai" &&
+    (!order.rating || !order.rating.stars);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 pb-20">
+    <div className="min-h-screen bg-gray-50 p-4 pb-24">
       <div className="max-w-2xl mx-auto">
-        {/* Header */}
-        <div className="mb-4 flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => navigate("/dashboard")}
-          >
+        <div className="mb-4 flex items-center gap-3 bg-white p-4 rounded-xl shadow-sm">
+          <Button variant="ghost" size="icon" onClick={handleBack}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <h1 className="text-2xl font-bold text-teal-600">Tracking Pesanan</h1>
+          <h1 className="text-lg font-bold text-gray-800">Tracking Pesanan</h1>
         </div>
 
-        {/* Status Card */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-4">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className={`p-3 rounded-full ${statusInfo.color}`}>
-                <StatusIcon className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Status</p>
-                <p className="text-lg font-bold text-gray-900">
-                  {statusInfo.label}
-                </p>
-              </div>
-            </div>
-            {order.isUrgent && (
-              <Badge variant="destructive" className="text-xs">
-                URGENT
-              </Badge>
-            )}
+          <div className="flex justify-between items-start mb-4">
+            <Badge className="bg-teal-600 text-white">
+              {order.status.replace("_", " ").toUpperCase()}
+            </Badge>
+            {order.isUrgent && <Badge variant="destructive">URGENT</Badge>}
           </div>
-
-          <Separator className="my-4" />
-
           <h2 className="text-xl font-bold text-gray-900 mb-2">
             {order.title}
           </h2>
           <p className="text-gray-600 text-sm mb-4">{order.description}</p>
-
-          {/* Financial Info */}
           <div className="grid grid-cols-2 gap-4 bg-teal-50 p-4 rounded-lg">
             <div>
               <p className="text-xs text-gray-600">Dana Talangan</p>
@@ -341,82 +289,48 @@ const OrderTracking = () => {
               </p>
             </div>
             <div>
-              <p className="text-xs text-gray-600">Biaya Jasa</p>
+              <p className="text-xs text-gray-600">Jasa Runner</p>
               <p className="text-lg font-bold text-teal-700">
                 Rp {formatCurrency(order.serviceFeeCuan)}
               </p>
             </div>
-            <div className="col-span-2 pt-2 border-t border-teal-200">
-              <p className="text-sm text-gray-600">Total Biaya</p>
-              <p className="text-2xl font-bold text-teal-800">
-                Rp{" "}
-                {formatCurrency(
-                  parseFloat(order.estimatedItemCost?.toString() || "0") +
-                    parseFloat(order.serviceFeeCuan?.toString() || "0")
-                )}
-              </p>
-            </div>
-          </div>
-
-          {/* Deadline */}
-          <div className="flex items-center gap-2 mt-4 text-sm text-gray-600">
-            <Clock className="h-4 w-4" />
-            <span>
-              Deadline:{" "}
-              {new Date(order.deadline).toLocaleString("id-ID", {
-                dateStyle: "medium",
-                timeStyle: "short",
-              })}
-            </span>
           </div>
         </div>
 
-        {/* Runner Info (if taken) */}
-        {order.runner && (
-          <div className="bg-white rounded-xl shadow-lg p-6 mb-4">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">
-              Info Runner
-            </h3>
-            <div className="flex items-center gap-4 mb-4">
-              <div className="w-16 h-16 rounded-full bg-teal-100 flex items-center justify-center">
-                {order.runner.profilePhoto ? (
-                  <img
-                    src={order.runner.profilePhoto}
-                    alt={order.runner.name}
-                    className="w-full h-full rounded-full object-cover"
-                  />
-                ) : (
-                  <User className="h-8 w-8 text-teal-600" />
-                )}
-              </div>
-              <div className="flex-1">
-                <p className="font-bold text-gray-900">{order.runner.name}</p>
-                <p className="text-sm text-gray-600">{order.runner.campus}</p>
-                <div className="flex items-center gap-2 mt-1">
-                  <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
-                  <span className="text-sm font-semibold">
-                    {order.runner.runnerStats.averageRating.toFixed(1)}
-                  </span>
-                  <span className="text-xs text-gray-500">
-                    ({order.runner.runnerStats.totalReviews} review)
-                  </span>
-                </div>
+        {showUploadAction && (
+          <Card className="mb-4 border-orange-200 bg-orange-50 shadow-md p-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-6 w-6 text-orange-600" />
+              <div className="w-full">
+                <h3 className="font-bold text-orange-800">Aksi Diperlukan</h3>
+                <p className="text-sm text-orange-700 mb-3">
+                  Upload foto bukti{" "}
+                  {order.status === "diambil" ? "pembelian" : "pengantaran"}.
+                </p>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  className="hidden"
+                  accept="image/*"
+                  onChange={handleFileUpload}
+                />
+                <Button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold"
+                >
+                  {uploading ? (
+                    <Loader2 className="animate-spin mr-2 h-4 w-4" />
+                  ) : (
+                    <Camera className="mr-2 h-4 w-4" />
+                  )}{" "}
+                  Upload Bukti
+                </Button>
               </div>
             </div>
-            <a
-              href={order.runner.whatsappLink}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Button className="w-full bg-green-600 hover:bg-green-700">
-                <MessageCircle className="h-4 w-4 mr-2" />
-                Chat via WhatsApp
-              </Button>
-            </a>
-          </div>
+          </Card>
         )}
 
-        {/* Timeline */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-4">
           <h3 className="text-lg font-bold text-gray-900 mb-4">Timeline</h3>
           <div className="space-y-6">
@@ -424,7 +338,7 @@ const OrderTracking = () => {
               <div key={index} className="flex gap-4">
                 <div className="flex flex-col items-center">
                   <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                    className={`w-8 h-8 rounded-full flex items-center justify-center ${
                       step.completed
                         ? "bg-teal-500 text-white"
                         : "bg-gray-200 text-gray-400"
@@ -438,7 +352,7 @@ const OrderTracking = () => {
                   </div>
                   {index < getTimelineSteps().length - 1 && (
                     <div
-                      className={`w-0.5 h-full min-h-[40px] ${
+                      className={`w-0.5 h-full min-h-[30px] ${
                         step.completed ? "bg-teal-500" : "bg-gray-200"
                       }`}
                     />
@@ -453,25 +367,21 @@ const OrderTracking = () => {
                     {step.label}
                   </p>
                   {step.time && (
-                    <p className="text-xs text-gray-500 mt-1">
-                      {new Date(step.time).toLocaleString("id-ID", {
-                        dateStyle: "short",
-                        timeStyle: "short",
-                      })}
+                    <p className="text-xs text-gray-500">
+                      {new Date(step.time).toLocaleString()}
                     </p>
                   )}
                   {step.photo && (
                     <div className="mt-2">
                       <img
-                        src={step.photo}
-                        alt="Bukti foto"
-                        className="rounded-lg max-w-full h-auto max-h-60 object-cover border-2 border-teal-200"
+                        src={`http://localhost:5000${step.photo}`}
+                        alt="Bukti"
+                        className="rounded-lg h-32 w-auto object-cover border border-gray-200 shadow-sm"
+                        onError={(e) => {
+                          e.currentTarget.src =
+                            "https://via.placeholder.com/150?text=No+Image";
+                        }}
                       />
-                      {step.notes && (
-                        <p className="text-sm text-gray-600 mt-2">
-                          📝 {step.notes}
-                        </p>
-                      )}
                     </div>
                   )}
                 </div>
@@ -480,103 +390,64 @@ const OrderTracking = () => {
           </div>
         </div>
 
-        {/* Locations */}
-        <div className="bg-white rounded-xl shadow-lg p-6 mb-4">
-          <h3 className="text-lg font-bold text-gray-900 mb-4">Lokasi</h3>
-          <div className="space-y-4">
-            <div>
-              <div className="flex items-start gap-3">
-                <MapPin className="h-5 w-5 text-teal-600 mt-0.5" />
-                <div>
-                  <p className="text-sm font-semibold text-gray-700">
-                    Lokasi Pengambilan
-                  </p>
-                  <p className="text-sm font-bold text-gray-900">
-                    {order.pickupLocation.name}
-                  </p>
-                  <p className="text-xs text-gray-600">
-                    {order.pickupLocation.address}
-                  </p>
-                </div>
-              </div>
+        <div className="bg-white rounded-xl shadow-lg p-6 mb-4 space-y-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <MapPin className="h-4 w-4 text-teal-600" />
+              <span className="text-xs font-bold text-gray-500 uppercase">
+                Ambil
+              </span>
             </div>
-            <Separator />
-            <div>
-              <div className="flex items-start gap-3">
-                <MapPin className="h-5 w-5 text-orange-600 mt-0.5" />
-                <div>
-                  <p className="text-sm font-semibold text-gray-700">
-                    Lokasi Pengantaran
-                  </p>
-                  <p className="text-sm font-bold text-gray-900">
-                    {order.deliveryLocation.name}
-                  </p>
-                  <p className="text-xs text-gray-600">
-                    {order.deliveryLocation.address}
-                  </p>
-                </div>
-              </div>
+            <p className="font-semibold">{order.pickupLocation.name}</p>
+          </div>
+          <Separator />
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <MapPin className="h-4 w-4 text-orange-600" />
+              <span className="text-xs font-bold text-gray-500 uppercase">
+                Antar
+              </span>
             </div>
+            <p className="font-semibold">{order.deliveryLocation.name}</p>
           </div>
         </div>
 
-        {/* Notes */}
-        {order.notes && (
-          <div className="bg-white rounded-xl shadow-lg p-6 mb-4">
-            <h3 className="text-lg font-bold text-gray-900 mb-2">Catatan</h3>
-            <p className="text-sm text-gray-600">{order.notes}</p>
-          </div>
-        )}
-
-        {/* Confirm Complete Button */}
-        {order.status === "sedang_diantar" && !order.rating && (
-          <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t shadow-lg">
+        {/* 🔥 TOMBOL KONFIRMASI 🔥 */}
+        {showConfirmButton && (
+          <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t shadow-[0_-5px_10px_rgba(0,0,0,0.1)] z-50">
             <div className="max-w-2xl mx-auto">
               <Button
                 onClick={() => setShowConfirmDialog(true)}
-                className="w-full bg-green-600 hover:bg-green-700 h-12 text-base font-semibold"
+                className="w-full bg-green-600 hover:bg-green-700 h-12 text-base font-bold shadow-lg"
               >
-                <CheckCircle className="h-5 w-5 mr-2" />
-                Konfirmasi Pesanan Diterima
+                <CheckCircle className="h-5 w-5 mr-2" /> Konfirmasi Pesanan
+                Diterima
               </Button>
             </div>
           </div>
         )}
 
-        {/* Show Rating if Already Rated */}
-        {order.rating && (
-          <div className="bg-white rounded-xl shadow-lg p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-3">
-              Rating Anda
-            </h3>
-            <div className="flex items-center gap-2 mb-2">
-              {[1, 2, 3, 4, 5].map((star) => (
-                <Star
-                  key={star}
-                  className={`h-6 w-6 ${
-                    star <= order.rating!.stars
-                      ? "text-yellow-500 fill-yellow-500"
-                      : "text-gray-300"
-                  }`}
-                />
-              ))}
+        {/* 🔥 TOMBOL RATING (MUNCUL JIKA SUDAH SELESAI TAPI BELUM RATE) 🔥 */}
+        {showRateButton && (
+          <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t shadow-[0_-5px_10px_rgba(0,0,0,0.1)] z-50">
+            <div className="max-w-2xl mx-auto">
+              <Button
+                onClick={() => setShowRatingDialog(true)}
+                className="w-full bg-teal-600 hover:bg-teal-700 h-12 text-base font-bold shadow-lg"
+              >
+                <Star className="h-5 w-5 mr-2" /> Beri Rating Runner
+              </Button>
             </div>
-            {order.rating.comment && (
-              <p className="text-sm text-gray-600 mt-2">
-                "{order.rating.comment}"
-              </p>
-            )}
           </div>
         )}
       </div>
 
-      {/* Confirm Dialog */}
       <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Konfirmasi Penerimaan</DialogTitle>
             <DialogDescription>
-              Apakah pesanan sudah diterima dengan baik?
+              Pesanan sudah diterima dengan baik?
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -589,7 +460,7 @@ const OrderTracking = () => {
             <Button
               onClick={handleConfirmComplete}
               disabled={confirming}
-              className="bg-green-600 hover:bg-green-700"
+              className="bg-green-600 text-white"
             >
               {confirming ? "Memproses..." : "Ya, Sudah Terima"}
             </Button>
@@ -597,52 +468,38 @@ const OrderTracking = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Rating Dialog */}
       <Dialog open={showRatingDialog} onOpenChange={setShowRatingDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Beri Rating Runner</DialogTitle>
-            <DialogDescription>
-              Bagaimana pengalaman Anda dengan runner?
-            </DialogDescription>
+            <DialogDescription>Gimana kinerja runnernya?</DialogDescription>
           </DialogHeader>
-          <div className="py-4">
+          <div className="py-4 text-center">
             <div className="flex justify-center gap-2 mb-4">
               {[1, 2, 3, 4, 5].map((star) => (
-                <button
-                  key={star}
-                  onClick={() => setRating(star)}
-                  className="focus:outline-none"
-                >
+                <button key={star} onClick={() => setRating(star)}>
                   <Star
-                    className={`h-10 w-10 transition-colors ${
+                    className={`h-8 w-8 ${
                       star <= rating
                         ? "text-yellow-500 fill-yellow-500"
-                        : "text-gray-300 hover:text-yellow-300"
+                        : "text-gray-300"
                     }`}
                   />
                 </button>
               ))}
             </div>
             <textarea
-              placeholder="Tulis komentar Anda (opsional)"
+              placeholder="Tulis komentar..."
               value={ratingComment}
               onChange={(e) => setRatingComment(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-              rows={3}
+              className="w-full px-3 py-2 border rounded-md"
             />
           </div>
           <DialogFooter>
             <Button
-              variant="outline"
-              onClick={() => setShowRatingDialog(false)}
-            >
-              Lewati
-            </Button>
-            <Button
               onClick={handleSubmitRating}
               disabled={submittingRating || rating === 0}
-              className="bg-teal-600 hover:bg-teal-700"
+              className="bg-teal-600 text-white"
             >
               {submittingRating ? "Mengirim..." : "Kirim Rating"}
             </Button>

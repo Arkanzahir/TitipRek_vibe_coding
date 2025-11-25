@@ -20,8 +20,10 @@ connectDB();
 
 // Middleware
 app.use(cors());
-app.use(express.json({ limit: "10mb" })); // Increased limit for base64 images
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+
+// 🔥 PERBAIKAN DI SINI: Naikkan limit jadi 50mb biar upload foto lancar
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
 // ✅ SERVE STATIC FILES (IMPORTANT FOR IMAGE UPLOAD)
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));

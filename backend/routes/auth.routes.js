@@ -1,9 +1,10 @@
-// routes/auth.routes.js
+// backend/routes/auth.routes.js
 const express = require("express");
 const router = express.Router();
 const jwt = require("jsonwebtoken");
 const User = require("../models/User.model");
 const { protect } = require("../middleware/auth.middleware");
+const { uploadToCloud } = require("../utils/upload.util"); // 🔥 Import Upload Utility
 
 // Generate JWT Token
 const generateToken = (id) => {
@@ -13,13 +14,10 @@ const generateToken = (id) => {
 };
 
 // @route   POST /api/auth/register
-// @desc    Register new user
-// @access  Public
 router.post("/register", async (req, res) => {
   try {
     const { name, email, password, phoneNumber, campus, address } = req.body;
 
-    // Validate required fields
     if (!name || !email || !password || !phoneNumber || !campus) {
       return res.status(400).json({
         success: false,
@@ -27,7 +25,6 @@ router.post("/register", async (req, res) => {
       });
     }
 
-    // Check if user already exists
     const existingUser = await User.findOne({
       $or: [{ email }, { phoneNumber }],
     });
@@ -42,7 +39,6 @@ router.post("/register", async (req, res) => {
       });
     }
 
-    // Create user
     const user = await User.create({
       name,
       email,
@@ -52,20 +48,12 @@ router.post("/register", async (req, res) => {
       address: address || "",
     });
 
-    // ❌ JANGAN GENERATE TOKEN SAAT REGISTER!
-    // const token = generateToken(user._id);
-
-    // Remove password from response
     user.password = undefined;
 
-    // ✅ KIRIM RESPONSE TANPA TOKEN
     res.status(201).json({
       success: true,
       message: "Registrasi berhasil! Silakan login untuk melanjutkan.",
-      data: {
-        user,
-        // NO TOKEN HERE! ✅
-      },
+      data: { user },
     });
   } catch (error) {
     console.error("Register Error:", error);
@@ -77,13 +65,10 @@ router.post("/register", async (req, res) => {
 });
 
 // @route   POST /api/auth/login
-// @desc    Login user
-// @access  Public
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Validate
     if (!email || !password) {
       return res.status(400).json({
         success: false,
@@ -91,7 +76,6 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    // Find user (include password for comparison)
     const user = await User.findOne({ email }).select("+password");
 
     if (!user) {
@@ -101,7 +85,6 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    // Check password
     const isMatch = await user.comparePassword(password);
 
     if (!isMatch) {
@@ -111,7 +94,6 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    // Check if account is active
     if (!user.isActive) {
       return res.status(403).json({
         success: false,
@@ -119,19 +101,13 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    // ✅ HANYA LOGIN YANG GENERATE TOKEN
     const token = generateToken(user._id);
-
-    // Remove password from response
     user.password = undefined;
 
     res.json({
       success: true,
       message: "Login berhasil",
-      data: {
-        user,
-        token, // ✅ TOKEN ADA DI LOGIN
-      },
+      data: { user, token },
     });
   } catch (error) {
     console.error("Login Error:", error);
@@ -143,28 +119,18 @@ router.post("/login", async (req, res) => {
 });
 
 // @route   GET /api/auth/me
-// @desc    Get current logged in user
-// @access  Private
 router.get("/me", protect, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-
-    res.json({
-      success: true,
-      data: user,
-    });
+    res.json({ success: true, data: user });
   } catch (error) {
     console.error("Get Me Error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Terjadi kesalahan saat mengambil data user",
-    });
+    res.status(500).json({ success: false, message: "Error server" });
   }
 });
 
 // @route   PUT /api/auth/update-profile
-// @desc    Update user profile
-// @access  Private
+// 🔥 UPDATED: Support Upload Foto Profil 🔥
 router.put("/update-profile", protect, async (req, res) => {
   try {
     const { name, phoneNumber, campus, address, profilePhoto } = req.body;
@@ -174,7 +140,25 @@ router.put("/update-profile", protect, async (req, res) => {
     if (phoneNumber) fieldsToUpdate.phoneNumber = phoneNumber;
     if (campus) fieldsToUpdate.campus = campus;
     if (address !== undefined) fieldsToUpdate.address = address;
-    if (profilePhoto) fieldsToUpdate.profilePhoto = profilePhoto;
+
+    // 🔥 LOGIKA UPLOAD FOTO 🔥
+    if (profilePhoto) {
+      // Cek apakah ini data gambar Base64?
+      if (profilePhoto.startsWith("data:image")) {
+        try {
+          const url = await uploadToCloud(profilePhoto, "profiles");
+          fieldsToUpdate.profilePhoto = url;
+        } catch (uploadError) {
+          console.error("Profile Upload Error:", uploadError);
+          return res
+            .status(500)
+            .json({ success: false, message: "Gagal mengupload foto profil" });
+        }
+      } else {
+        // Kalau cuma string biasa (bukan base64), simpan langsung
+        fieldsToUpdate.profilePhoto = profilePhoto;
+      }
+    }
 
     const user = await User.findByIdAndUpdate(req.user.id, fieldsToUpdate, {
       new: true,
@@ -196,45 +180,35 @@ router.put("/update-profile", protect, async (req, res) => {
 });
 
 // @route   PUT /api/auth/change-password
-// @desc    Change user password
-// @access  Private
 router.put("/change-password", protect, async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
 
     if (!currentPassword || !newPassword) {
-      return res.status(400).json({
-        success: false,
-        message: "Password lama dan baru harus diisi",
-      });
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "Password lama dan baru harus diisi",
+        });
     }
 
     const user = await User.findById(req.user.id).select("+password");
-
-    // Verify current password
     const isMatch = await user.comparePassword(currentPassword);
 
     if (!isMatch) {
-      return res.status(401).json({
-        success: false,
-        message: "Password lama tidak sesuai",
-      });
+      return res
+        .status(401)
+        .json({ success: false, message: "Password lama tidak sesuai" });
     }
 
-    // Update password
     user.password = newPassword;
     await user.save();
 
-    res.json({
-      success: true,
-      message: "Password berhasil diubah",
-    });
+    res.json({ success: true, message: "Password berhasil diubah" });
   } catch (error) {
     console.error("Change Password Error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Terjadi kesalahan saat mengubah password",
-    });
+    res.status(500).json({ success: false, message: "Error server" });
   }
 });
 

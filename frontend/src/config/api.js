@@ -1,20 +1,20 @@
 // src/config/api.js
-import axios from 'axios';
+import axios from "axios";
 
-const API_URL = 'http://localhost:5000/api';
+const API_URL = "http://localhost:5000/api";
 
 // Create axios instance
 const api = axios.create({
   baseURL: API_URL,
   headers: {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   },
 });
 
 // Add token to requests
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem("token");
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -25,12 +25,27 @@ api.interceptors.request.use(
   }
 );
 
-// Handle responses
+// Handle responses - IMPROVED
 api.interceptors.response.use(
-  (response) => response.data,
+  (response) => {
+    const data = response.data;
+
+    // Return response data (dengan success flag)
+    return data;
+  },
   (error) => {
-    const message = error.response?.data?.message || 'Something went wrong';
-    return Promise.reject(new Error(message));
+    // Handle HTTP errors (4xx, 5xx)
+    if (error.response?.data) {
+      // Jika backend return error response dengan message
+      const message = error.response.data.message || "Terjadi kesalahan";
+      return Promise.reject(new Error(message));
+    }
+
+    if (error.message === "Network Error") {
+      return Promise.reject(new Error("Tidak bisa terhubung ke server"));
+    }
+
+    return Promise.reject(error);
   }
 );
 

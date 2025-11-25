@@ -1,218 +1,363 @@
-import { useEffect, useState } from "react";
+// src/pages/ConsumerProfile.tsx - FINAL FIX BADGE ROLE
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { authService } from "@/services/authService";
 import {
   ArrowLeft,
   User,
-  Mail,
-  Phone,
-  MapPin,
-  CreditCard,
   History,
+  CreditCard,
+  MapPin,
   Bell,
   HelpCircle,
   LogOut,
   ChevronRight,
+  Mail,
+  Phone,
+  GraduationCap,
+  Loader2,
+  Camera,
+  ShieldCheck, // Icon Admin
+  Bike, // Icon Runner
+  ShoppingBag, // Icon Konsumen
 } from "lucide-react";
-import { toast } from "sonner";
-import { authService } from "@/services/authService";
+
+const API_URL = "http://localhost:5000/api";
 
 const ConsumerProfile = () => {
   const navigate = useNavigate();
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(authService.getUser());
+  const [isEditing, setIsEditing] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  // Load user data from localStorage
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [formData, setFormData] = useState({
+    name: user?.name || "",
+    phoneNumber: user?.phoneNumber || "",
+    campus: user?.campus || "",
+    profilePhoto: user?.profilePhoto || "",
+  });
+
+  // Auto-refresh data user
   useEffect(() => {
-    const loadUser = () => {
-      const userData = authService.getUser();
-      if (userData) {
-        setUser(userData);
-      } else {
-        // If no user, redirect to login
-        toast.error("Anda belum login!");
-        navigate("/auth");
+    const fetchFreshUserData = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) return;
+
+        const response = await fetch(`${API_URL}/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          setUser(result.data);
+          localStorage.setItem("user", JSON.stringify(result.data));
+          setFormData((prev) => ({
+            ...prev,
+            name: result.data.name,
+            phoneNumber: result.data.phoneNumber,
+            campus: result.data.campus,
+            profilePhoto: result.data.profilePhoto,
+          }));
+        }
+      } catch (error) {
+        console.error("Gagal refresh user:", error);
       }
-      setLoading(false);
     };
 
-    loadUser();
-  }, [navigate]);
+    fetchFreshUserData();
+  }, []);
 
   const handleLogout = () => {
-    authService.logout();
-    toast.success("Berhasil logout!");
-    navigate("/auth");
+    if (window.confirm("Apakah Anda yakin ingin keluar?")) {
+      authService.logout();
+      navigate("/auth");
+    }
   };
+
+  const handleUpdateProfile = async () => {
+    setLoading(true);
+    try {
+      const response = await authService.updateProfile(formData);
+      if (response.success) {
+        const currentUser = authService.getUser();
+        setUser(currentUser);
+        setIsEditing(false);
+        alert("Profil berhasil diperbarui!");
+      } else {
+        alert("Gagal update: " + response.message);
+      }
+    } catch (error: any) {
+      alert("Terjadi kesalahan saat update profil");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        alert("Ukuran foto terlalu besar (maks 5MB)");
+        return;
+      }
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onloadend = () => {
+        setFormData({ ...formData, profilePhoto: reader.result as string });
+      };
+    }
+  };
+
+  const getPhotoUrl = (path: string) => {
+    if (!path) return "";
+    return path.startsWith("data:") || path.startsWith("http")
+      ? path
+      : `http://localhost:5000${path}`;
+  };
+
+  // Logika Cek Role
+  const rolesString = JSON.stringify(user?.roles || []).toLowerCase();
+  const isRunner = rolesString.includes("runner");
+  const isAdmin = rolesString.includes("admin");
 
   const menuItems = [
     {
       icon: User,
       label: "Edit Profil",
-      action: () => toast.info("Fitur edit profil akan segera hadir!"),
+      action: () => setIsEditing(true),
+      color: "text-blue-500",
     },
     {
       icon: History,
       label: "Riwayat Pesanan",
       action: () => navigate("/order-history"),
+      color: "text-green-500",
     },
     {
       icon: CreditCard,
       label: "Metode Pembayaran",
-      action: () => toast.info("Fitur pembayaran akan segera hadir!"),
+      action: () => alert("Segera Hadir!"),
+      color: "text-purple-500",
     },
     {
       icon: MapPin,
       label: "Alamat Tersimpan",
-      action: () => toast.info("Fitur alamat akan segera hadir!"),
+      action: () => alert("Segera Hadir!"),
+      color: "text-orange-500",
     },
     {
       icon: Bell,
       label: "Notifikasi",
-      action: () => toast.info("Pengaturan notifikasi akan segera hadir!"),
+      action: () => alert("Belum ada notifikasi"),
+      color: "text-yellow-500",
     },
     {
       icon: HelpCircle,
       label: "Bantuan & FAQ",
-      action: () => toast.info("Halaman bantuan akan segera hadir!"),
+      action: () => alert("Hubungi Admin"),
+      color: "text-teal-500",
     },
   ];
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4 text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return null;
-  }
-
-  // Format phone number for display
-  const displayPhone = user.phoneNumber?.startsWith("62")
-    ? "0" + user.phoneNumber.substring(2)
-    : user.phoneNumber;
-
-  // Format join date
-  const joinDate = user.createdAt
-    ? new Date(user.createdAt).toLocaleDateString("id-ID", {
-        month: "long",
-        year: "numeric",
-      })
-    : "Baru bergabung";
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-white to-accent/5 pb-20">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-primary to-accent text-white p-6 rounded-b-3xl shadow-xl">
-        <Button
-          variant="ghost"
-          onClick={() => navigate(-1)}
-          className="mb-4 text-white hover:bg-white/20"
-        >
-          <ArrowLeft className="w-5 h-5 mr-2" />
-          Kembali
-        </Button>
+    <div className="min-h-screen bg-gray-50 pb-20">
+      <div className="bg-gradient-to-r from-teal-500 to-green-500 pt-6 pb-24 px-4 rounded-b-[30px] shadow-lg text-white relative">
+        <div className="flex items-center gap-3 mb-6">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate("/dashboard")}
+            className="text-white hover:bg-white/20"
+          >
+            <ArrowLeft className="h-6 w-6" />
+          </Button>
+          <h1 className="text-xl font-bold">Profil Saya</h1>
+        </div>
 
-        <div className="flex items-center gap-4">
-          <Avatar className="w-20 h-20 border-4 border-white shadow-xl">
-            <AvatarFallback className="text-2xl bg-white text-primary font-bold">
-              {user.name?.charAt(0).toUpperCase() || "U"}
-            </AvatarFallback>
-          </Avatar>
+        <div className="flex flex-col items-center">
+          <div className="relative">
+            <Avatar className="h-28 w-28 border-4 border-white shadow-2xl">
+              <AvatarImage
+                src={getPhotoUrl(user?.profilePhoto)}
+                className="object-cover"
+              />
+              <AvatarFallback className="bg-white text-teal-600 text-4xl font-bold">
+                {user?.name?.charAt(0).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <button
+              onClick={() => setIsEditing(true)}
+              className="absolute bottom-0 right-0 bg-white text-teal-600 p-2 rounded-full shadow-lg hover:bg-gray-100 transition-colors"
+            >
+              <Camera className="h-5 w-5" />
+            </button>
+          </div>
 
-          <div className="flex-1">
-            <h1 className="text-2xl font-bold mb-1">{user.name || "User"}</h1>
-            <div className="flex items-center gap-2 mb-2">
-              <Badge className="bg-white text-primary">
-                {user.consumerStats?.totalOrders || 0} Pesanan
-              </Badge>
-              <span className="text-white/80 text-sm">
-                • Member sejak {joinDate}
+          <h2 className="text-2xl font-bold mt-4">{user?.name}</h2>
+
+          {/* 🔥 BADGE ROLE: DIJAMIN MUNCUL SEMUA 🔥 */}
+          <div className="flex gap-2 mt-3 justify-center flex-wrap">
+            {/* Badge Admin */}
+            {isAdmin && (
+              <span className="bg-red-500/20 border border-red-400 text-white px-3 py-1 rounded-full text-sm flex items-center gap-1 font-semibold shadow-sm">
+                <ShieldCheck className="h-3 w-3" /> Admin
               </span>
-            </div>
+            )}
+
+            {/* Badge Runner */}
+            {isRunner && (
+              <span className="bg-orange-500/20 border border-orange-400 text-white px-3 py-1 rounded-full text-sm flex items-center gap-1 font-semibold shadow-sm">
+                <Bike className="h-3 w-3" /> Runner
+              </span>
+            )}
+
+            {/* Badge Konsumen (Selalu Muncul) */}
+            <span className="bg-white/20 border border-white/30 text-white px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1">
+              <ShoppingBag className="h-3 w-3" /> Konsumen
+            </span>
           </div>
         </div>
       </div>
 
-      <div className="px-4 mt-6 space-y-4">
-        {/* Contact Info Card */}
-        <Card className="shadow-lg border-0">
-          <CardContent className="p-4 space-y-3">
-            <div className="flex items-center gap-3">
-              <Mail className="w-5 h-5 text-primary" />
-              <div>
-                <div className="text-xs text-muted-foreground">Email</div>
-                <div className="font-medium">{user.email || "-"}</div>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <Phone className="w-5 h-5 text-primary" />
-              <div>
-                <div className="text-xs text-muted-foreground">
-                  No. WhatsApp
-                </div>
-                <div className="font-medium">{displayPhone || "-"}</div>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <MapPin className="w-5 h-5 text-primary" />
-              <div>
-                <div className="text-xs text-muted-foreground">Kampus</div>
-                <div className="font-medium">{user.campus || "-"}</div>
-              </div>
-            </div>
-            {user.address && (
-              <div className="flex items-center gap-3">
-                <MapPin className="w-5 h-5 text-primary" />
-                <div>
-                  <div className="text-xs text-muted-foreground">Alamat</div>
-                  <div className="font-medium">{user.address}</div>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+      <div className="container mx-auto px-4 -mt-12 relative z-10">
+        <div className="bg-white rounded-xl shadow-md p-5 mb-4 space-y-3">
+          <div className="flex items-center gap-3 text-gray-600">
+            <Mail className="h-5 w-5 text-gray-400" />
+            <span className="text-sm">{user?.email}</span>
+          </div>
+          <div className="flex items-center gap-3 text-gray-600">
+            <Phone className="h-5 w-5 text-gray-400" />
+            <span className="text-sm">{user?.phoneNumber}</span>
+          </div>
+          <div className="flex items-center gap-3 text-gray-600">
+            <GraduationCap className="h-5 w-5 text-gray-400" />
+            <span className="text-sm">{user?.campus}</span>
+          </div>
+        </div>
 
-        {/* Menu Items */}
-        <Card className="shadow-lg border-0">
-          <CardContent className="p-2">
-            {menuItems.map((item, index) => (
-              <button
-                key={index}
-                onClick={item.action}
-                className="w-full flex items-center gap-3 p-3 hover:bg-gray-50 rounded-lg transition-colors"
-              >
-                <div className="w-10 h-10 rounded-full bg-gradient-to-r from-primary/10 to-accent/10 flex items-center justify-center">
-                  <item.icon className="w-5 h-5 text-primary" />
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-6">
+          {menuItems.map((item, index) => (
+            <div
+              key={index}
+              onClick={item.action}
+              className="flex items-center justify-between p-4 border-b border-gray-100 last:border-0 cursor-pointer hover:bg-gray-50"
+            >
+              <div className="flex items-center gap-4">
+                <div className={`p-2 rounded-lg bg-gray-50 ${item.color}`}>
+                  <item.icon className="h-5 w-5" />
                 </div>
-                <span className="flex-1 text-left font-medium">
-                  {item.label}
-                </span>
-                <ChevronRight className="w-5 h-5 text-muted-foreground" />
-              </button>
-            ))}
-          </CardContent>
-        </Card>
+                <span className="font-medium text-gray-700">{item.label}</span>
+              </div>
+              <ChevronRight className="h-5 w-5 text-gray-300" />
+            </div>
+          ))}
+        </div>
 
-        {/* Logout Button */}
         <Button
           onClick={handleLogout}
           variant="destructive"
-          className="w-full py-6 text-lg shadow-lg"
+          className="w-full h-12 text-base font-semibold shadow-sm"
         >
-          <LogOut className="w-5 h-5 mr-2" />
-          Keluar
+          <LogOut className="h-5 w-5 mr-2" /> Keluar Aplikasi
         </Button>
       </div>
+
+      <Dialog open={isEditing} onOpenChange={setIsEditing}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Profil</DialogTitle>
+            <DialogDescription>Perbarui informasi akun Anda.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="flex flex-col items-center gap-2 mb-2">
+              <div className="relative w-20 h-20">
+                <Avatar className="h-20 w-20 border-2 border-gray-200">
+                  <AvatarImage
+                    src={
+                      formData.profilePhoto?.startsWith("data:")
+                        ? formData.profilePhoto
+                        : getPhotoUrl(formData.profilePhoto)
+                    }
+                    className="object-cover"
+                  />
+                  <AvatarFallback>{formData.name?.charAt(0)}</AvatarFallback>
+                </Avatar>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="absolute bottom-0 right-0 bg-teal-600 text-white p-1.5 rounded-full shadow hover:bg-teal-700"
+                >
+                  <Camera className="h-3 w-3" />
+                </button>
+              </div>
+              <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                accept="image/*"
+                onChange={handlePhotoChange}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Nama Lengkap</Label>
+              <Input
+                value={formData.name}
+                onChange={(e) =>
+                  setFormData({ ...formData, name: e.target.value })
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Nomor WhatsApp</Label>
+              <Input
+                value={formData.phoneNumber}
+                onChange={(e) =>
+                  setFormData({ ...formData, phoneNumber: e.target.value })
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Kampus</Label>
+              <Input
+                value={formData.campus}
+                onChange={(e) =>
+                  setFormData({ ...formData, campus: e.target.value })
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditing(false)}>
+              Batal
+            </Button>
+            <Button
+              onClick={handleUpdateProfile}
+              disabled={loading}
+              className="bg-teal-600 hover:bg-teal-700"
+            >
+              {loading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}{" "}
+              Simpan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

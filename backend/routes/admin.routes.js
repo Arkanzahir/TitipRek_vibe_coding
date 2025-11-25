@@ -119,14 +119,16 @@ router.post(
         });
       }
 
-      if (user.runnerVerification.status !== "pending") {
+      // Allow approve jika status pending atau belum ada/kosong
+      // Reject hanya jika status rejected atau ada status lain
+      if (user.runnerVerification.status === "rejected") {
         return res.status(400).json({
           success: false,
-          message: "Verifikasi bukan dalam status pending",
+          message: `Tidak bisa approve runner dengan status rejected. Hubungi runner untuk resubmit.`,
         });
       }
 
-      // Update verification status
+      // Update verification status ke verified
       user.runnerVerification.status = "verified";
       user.runnerVerification.verifiedAt = new Date();
       await user.save();
