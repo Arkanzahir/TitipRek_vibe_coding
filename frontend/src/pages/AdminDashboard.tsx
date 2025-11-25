@@ -1,4 +1,4 @@
-// src/pages/AdminDashboard.tsx - FIX DATA PENDING
+// src/pages/AdminDashboard.tsx
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -20,8 +20,8 @@ import {
   Eye,
 } from "lucide-react";
 
-// URL Backend untuk buka foto
-const API_URL = "https://titip-rek-vibe-coding.vercel.app"; // Ganti dengan link vercel backend kamu kalau sudah deploy
+// URL Backend (Gunakan link Vercel kamu)
+const API_URL = "https://titip-rek-vibe-coding.vercel.app";
 
 interface PlatformStats {
   users: {
@@ -112,10 +112,9 @@ const AdminDashboard = () => {
         setStats(statsResponse.data);
       }
 
-      // 2. 🔥 FIX: Ambil Data Pending Pakai Endpoint Khusus (Bukan Filter Manual)
+      // 2. Ambil Data Pending
       const pendingResponse = await adminService.getPendingVerifications();
       if (pendingResponse.success) {
-        console.log("Data Pending:", pendingResponse.data); // Debug
         setPendingRunners(pendingResponse.data);
       }
 
@@ -146,7 +145,7 @@ const AdminDashboard = () => {
       const response = await adminService.approveRunner(userId);
       if (response.success) {
         alert(`✅ ${name} berhasil diverifikasi!`);
-        await fetchData(); // Refresh data setelah approve
+        await fetchData();
       } else {
         alert(`Gagal approve: ${response.message}`);
       }
@@ -166,7 +165,7 @@ const AdminDashboard = () => {
       const response = await adminService.rejectRunner(userId, reason);
       if (response.success) {
         alert(`❌ Verifikasi ${name} ditolak`);
-        await fetchData(); // Refresh data setelah reject
+        await fetchData();
       } else {
         alert(`Gagal reject: ${response.message}`);
       }
@@ -200,7 +199,6 @@ const AdminDashboard = () => {
 
   const openKtmPhoto = (path: string) => {
     if (!path) return;
-    // Cek apakah path sudah full URL atau belum
     const fullUrl = path.startsWith("http") ? path : `${API_URL}${path}`;
     window.open(fullUrl, "_blank");
   };
@@ -222,7 +220,6 @@ const AdminDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-6">
-      {/* Header */}
       <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg sticky top-0 z-10">
         <div className="container mx-auto px-4 py-6">
           <div className="flex items-center gap-3 mb-4">
@@ -238,7 +235,7 @@ const AdminDashboard = () => {
             <h1 className="text-3xl font-bold">Admin Dashboard</h1>
           </div>
 
-          {/* Stats Cards */}
+          {/* Stats Cards - UPDATED */}
           {stats && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <Card className="p-4 bg-white border-0 shadow-lg">
@@ -249,8 +246,10 @@ const AdminDashboard = () => {
                 <p className="text-3xl font-bold text-gray-900">
                   {stats.users.total}
                 </p>
-                <p className="text-xs mt-1 text-gray-500">
-                  {stats.users.totalRunners} runners
+
+                {/* 🔥 UPDATE: Tampilkan Verified Runner agar datanya valid dan sinkron 🔥 */}
+                <p className="text-xs mt-1 text-green-600 font-medium">
+                  {stats.users.verifiedRunners} Verified Runners
                 </p>
               </Card>
               <Card className="p-4 bg-white border-0 shadow-lg">
@@ -287,7 +286,6 @@ const AdminDashboard = () => {
             </div>
           )}
 
-          {/* Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
             <TabsList className="grid w-full grid-cols-4 bg-white/10">
               <TabsTrigger
@@ -324,10 +322,8 @@ const AdminDashboard = () => {
         </div>
       </div>
 
-      {/* Content */}
       <div className="container mx-auto px-4 py-6">
         <Tabs value={activeTab}>
-          {/* OVERVIEW TAB */}
           <TabsContent value="overview" className="space-y-4">
             <Card className="p-6">
               <h2 className="text-xl font-bold mb-4">Platform Overview</h2>
@@ -378,7 +374,6 @@ const AdminDashboard = () => {
             </Card>
           </TabsContent>
 
-          {/* VERIFICATIONS TAB (FIXED) */}
           <TabsContent value="verifications" className="space-y-4">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-bold">Verifikasi Runner Pending</h2>
@@ -391,15 +386,12 @@ const AdminDashboard = () => {
               <Card className="p-8 text-center bg-white">
                 <CheckCircle className="h-12 w-12 text-gray-400 mx-auto mb-3" />
                 <p className="text-gray-600">Tidak ada verifikasi pending</p>
-                <p className="text-xs text-gray-400 mt-2">
-                  Semua aman! Belum ada yang daftar lagi.
-                </p>
               </Card>
             ) : (
               pendingRunners.map((runner) => (
                 <Card
                   key={runner._id}
-                  className="p-4 bg-white border border-gray-200 mb-3 shadow-sm"
+                  className="p-4 bg-white border border-gray-200 mb-3"
                 >
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
@@ -466,7 +458,6 @@ const AdminDashboard = () => {
             )}
           </TabsContent>
 
-          {/* USERS TAB */}
           <TabsContent value="users" className="space-y-4">
             {users.map((user) => (
               <Card
@@ -504,7 +495,6 @@ const AdminDashboard = () => {
             ))}
           </TabsContent>
 
-          {/* ORDERS TAB */}
           <TabsContent value="orders" className="space-y-4">
             {orders.map((order) => (
               <Card
