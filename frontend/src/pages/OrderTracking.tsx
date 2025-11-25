@@ -1,4 +1,4 @@
-// src/pages/OrderTracking.tsx
+// src/pages/OrderTracking.tsx - FINAL FIX IMAGE & UPLOAD
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -27,9 +27,12 @@ import {
   ArrowLeft,
   Loader2,
   Camera,
+  Upload,
 } from "lucide-react";
 
-// Interface
+// URL Backend Produksi
+const API_URL = "https://titip-rek-vibe-coding.vercel.app";
+
 interface Order {
   _id: string;
   title: string;
@@ -85,7 +88,10 @@ const OrderTracking = () => {
   const currentUser = authService.getUser();
 
   useEffect(() => {
-    if (!orderId) return;
+    if (!orderId) {
+      setError("Order ID tidak ditemukan");
+      return;
+    }
     fetchOrderDetail();
   }, [orderId]);
 
@@ -205,6 +211,17 @@ const OrderTracking = () => {
     return num.toLocaleString("id-ID");
   };
 
+  // 🔥 FUNGSI SMART IMAGE URL (Biar Gak Pecah) 🔥
+  const getImageSrc = (photoData: string) => {
+    if (!photoData) return "";
+    // Kalau Base64 (Data Gambar Langsung), pakai langsung
+    if (photoData.startsWith("data:")) return photoData;
+    // Kalau URL lengkap (http...), pakai langsung
+    if (photoData.startsWith("http")) return photoData;
+    // Kalau path file (/uploads...), gabung dengan URL Backend
+    return `${API_URL}${photoData}`;
+  };
+
   const getTimelineSteps = () => {
     if (!order) return [];
     return [
@@ -252,8 +269,6 @@ const OrderTracking = () => {
   const showUploadAction =
     isMyMission &&
     (order.status === "diambil" || order.status === "sudah_dibeli");
-
-  // 🔥 UPDATE LOGIC TOMBOL 🔥
   const showConfirmButton = !isMyMission && order.status === "sedang_diantar";
   const showRateButton =
     !isMyMission &&
@@ -371,15 +386,17 @@ const OrderTracking = () => {
                       {new Date(step.time).toLocaleString()}
                     </p>
                   )}
+
+                  {/* 🔥 MENAMPILKAN GAMBAR BUKTI (ANTI PECAH) 🔥 */}
                   {step.photo && (
                     <div className="mt-2">
                       <img
-                        src={`https://titip-rek-vibe-coding.vercel.app${step.photo}`}
+                        src={getImageSrc(step.photo)}
                         alt="Bukti"
                         className="rounded-lg h-32 w-auto object-cover border border-gray-200 shadow-sm"
                         onError={(e) => {
                           e.currentTarget.src =
-                            "https://via.placeholder.com/150?text=No+Image";
+                            "https://placehold.co/400x300?text=No+Image";
                         }}
                       />
                     </div>
@@ -412,7 +429,6 @@ const OrderTracking = () => {
           </div>
         </div>
 
-        {/* 🔥 TOMBOL KONFIRMASI 🔥 */}
         {showConfirmButton && (
           <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t shadow-[0_-5px_10px_rgba(0,0,0,0.1)] z-50">
             <div className="max-w-2xl mx-auto">
@@ -427,7 +443,6 @@ const OrderTracking = () => {
           </div>
         )}
 
-        {/* 🔥 TOMBOL RATING (MUNCUL JIKA SUDAH SELESAI TAPI BELUM RATE) 🔥 */}
         {showRateButton && (
           <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t shadow-[0_-5px_10px_rgba(0,0,0,0.1)] z-50">
             <div className="max-w-2xl mx-auto">
