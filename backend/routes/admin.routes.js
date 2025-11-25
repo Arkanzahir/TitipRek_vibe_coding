@@ -5,9 +5,6 @@ const User = require("../models/User.model");
 const Order = require("../models/Order.model");
 const { protect, requireAdmin } = require("../middleware/auth.middleware");
 
-// All admin routes require admin role
-// Add this middleware: requireAdmin
-
 // @route   GET /api/admin/stats
 // @desc    Get platform statistics
 // @access  Private + Admin Only
@@ -21,6 +18,8 @@ router.get("/stats", protect, requireAdmin, async (req, res) => {
     const pendingVerifications = await User.countDocuments({
       "runnerVerification.status": "pending",
     });
+
+    // 🔥 FIX: Pastikan hitungan Verified Runner benar dari status, bukan role 🔥
     const verifiedRunners = await User.countDocuments({
       "runnerVerification.status": "verified",
     });
@@ -52,7 +51,7 @@ router.get("/stats", protect, requireAdmin, async (req, res) => {
           total: totalUsers,
           totalRunners,
           pendingVerifications,
-          verifiedRunners,
+          verifiedRunners, // Kirim data yang benar
         },
         orders: {
           total: totalOrders,
@@ -119,18 +118,15 @@ router.post(
         });
       }
 
-      // Allow approve jika status pending atau belum ada/kosong
-      // Reject hanya jika status rejected atau ada status lain
-      if (user.runnerVerification.status === "rejected") {
-        return res.status(400).json({
-          success: false,
-          message: `Tidak bisa approve runner dengan status rejected. Hubungi runner untuk resubmit.`,
-        });
-      }
-
       // Update verification status ke verified
       user.runnerVerification.status = "verified";
       user.runnerVerification.verifiedAt = new Date();
+
+      // 🔥 FIX: Pastikan Role Runner juga ditambahkan 🔥
+      if (!user.roles.includes("runner")) {
+        user.roles.push("runner");
+      }
+
       await user.save();
 
       res.json({
@@ -178,6 +174,10 @@ router.post(
       // Update verification status
       user.runnerVerification.status = "rejected";
       user.runnerVerification.rejectionReason = reason;
+
+      // Hapus role runner jika ada (karena ditolak)
+      user.roles = user.roles.filter((role) => role !== "runner");
+
       await user.save();
 
       res.json({
